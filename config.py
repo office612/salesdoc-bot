@@ -3,30 +3,29 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "ВСТАВИ_ТОКЕН")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "VSTAVI_TOKEN")
 SPREADSHEET_ID = "1WJJRqPvQ_i9jVhQgNc2Kuuynneu9jjTJwMGijCZHKho"
 ACCOUNTANT_CHAT_ID = int(os.getenv("ACCOUNTANT_CHAT_ID", "-1001000000000"))
 TIMEZONE = "Asia/Almaty"
 
 MONTH_SHEETS = {
-    1: "Янв", 2: "Фев", 3: "Мар", 4: "Апр", 5: "Май", 6: "Июн",
-    7: "Июл", 8: "Авг", 9: "Сен", 10: "Окт", 11: "Ноя", 12: "Дек"
+    1: "Yan", 2: "Fev", 3: "Mar", 4: "Apr", 5: "May", 6: "Iyun",
+    7: "Iyul", 8: "Avg", 9: "Sen", 10: "Okt", 11: "Noy", 12: "Dek"
 }
 
-LEADER = "Мирзахаит"
+LEADER = "Mirzahait"
 EMPLOYEES = {
-    "managers": ["Айдос", "Айдос Хапез", "Юлия", "Акбар", "Самат"],
-    "accountants": ["Гульшан", "Аурика"],
+    "managers": ["Aidos", "Aidos Hapez", "Yulia", "Akbar", "Samat"],
+    "accountants": ["Gulshan", "Aurika"],
 }
 
 CATEGORIES = [
     ("salesdoc", "SalesDoc"),
-    ("svetofor", "Светофор"),
-    ("other", "Другое"),
+    ("other", "Drugoe"),
 ]
 
-LICENSE_TYPES = ["1 место", "2 места", "3 места", "5 мест", "10 мест", "20 мест", "50 мест", "100+ мест"]
+LICENSE_TYPES = ["Bazoviy", "Standart", "Premium"]
 
-PERIODS = ["1 мес", "3 мес", "6 мес", "12 мес"]
+PERIODS = ["1 mes", "3 mes", "6 mes", "12 mes"]
 
-BANKS = ["Каспи Банк", "Халык Банк", "Наличные"]
+BANKS = ["Kaspi", "Halyk", "BCC", "Jusan", "Forte"]
