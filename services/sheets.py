@@ -1,5 +1,7 @@
 import gspread
 import logging
+import json
+import os
 from datetime import datetime, date
 from typing import Optional
 import pytz
@@ -21,7 +23,12 @@ _spreadsheet: Optional[gspread.Spreadsheet] = None
 def get_client() -> gspread.Client:
     global _client
     if _client is None:
-        creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+        google_creds_json = os.getenv("GOOGLE_CREDENTIALS")
+        if google_creds_json:
+            creds_dict = json.loads(google_creds_json)
+            creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+        else:
+            creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
         _client = gspread.authorize(creds)
     return _client
 
@@ -77,7 +84,7 @@ def add_payment(data: dict) -> int:
         data.get("period", ""),
         data.get("amount", ""),
         data.get("bank", ""),
-        "Нет",
+        "Net",
         data.get("amount", ""),
         "",
         "",
@@ -93,7 +100,7 @@ def add_payment(data: dict) -> int:
 def confirm_payment(row_num: int, month: int) -> bool:
     try:
         ws = get_sheet_by_month(month)
-        ws.update_cell(row_num, 12, "Да")
+        ws.update_cell(row_num, 12, "Yes")
         logger.info(f"Confirmed payment row {row_num}")
         return True
     except Exception as e:
@@ -132,7 +139,7 @@ def get_payments_for_period(start_date: date, end_date: date) -> list[dict]:
                         "category": row[2] if len(row) > 2 else "",
                         "manager": row[5] if len(row) > 5 else "",
                         "amount": _parse_amount(row[9]) if len(row) > 9 else 0,
-                        "seated": row[11] if len(row) > 11 else "Нет",
+                        "seated": row[11] if len(row) > 11 else "Net",
                     })
         except Exception as e:
             logger.warning(f"Error reading sheet month {month}: {e}")
