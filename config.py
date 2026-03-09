@@ -6,6 +6,7 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN", "ВСТАВИ_СВОЙ_TELEGRAM_BOT_TOKEN")
 SPREADSHEET_ID = "1WJJRqPvQ_i9jVhQgNc2Kuuynneu9jjTJwMGijCZHKho"
 ACCOUNTANT_CHAT_ID = int(os.getenv("ACCOUNTANT_CHAT_ID", "-1001000000000"))
+TIMEZONE = "Asia/Almaty"
 
 MONTH_SHEETS = {
     1: "Янв", 2: "Фев", 3: "Мар", 4: "Апр", 5: "Май", 6: "Июн",
