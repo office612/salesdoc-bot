@@ -4,20 +4,16 @@ from services.sheets import get_user, register_user
 
 def get_role(name: str) -> str:
     if name == LEADER:
-        return "руководитель"
+        return "rukovoditel"
     if name in EMPLOYEES["managers"]:
-        return "менеджер"
+        return "menedzher"
     if name in EMPLOYEES["accountants"]:
-        return "бухгалтер"
-    return "менеджер"
+        return "buhgalter"
+    return "menedzher"
 
 
 def get_all_names() -> list[str]:
-    all_names = (
-        EMPLOYEES["managers"]
-        + EMPLOYEES["accountants"]
-    )
-    return all_names
+    return EMPLOYEES["managers"] + EMPLOYEES["accountants"]
 
 
 def get_user_info(telegram_id: int) -> dict | None:
@@ -31,8 +27,12 @@ def register(telegram_id: int, name: str) -> dict:
 
 
 def is_manager(user: dict) -> bool:
-    return user.get("role") in ("менеджер", "руководитель")
+    return user.get("role") in ("menedzher", "rukovoditel")
 
 
 def is_accountant(user: dict) -> bool:
-    return user.get("role") in ("бухгалтер", "руководитель")
+    return user.get("role") in ("buhgalter", "rukovoditel")
+
+
+def is_leader(user: dict) -> bool:
+    return user.get("role") == "rukovoditel"
