@@ -4,7 +4,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from states import PaymentStates
 from keyboards.payment import categories_kb, license_types_kb, periods_kb, banks_kb, confirm_kb
-from services.sheets import save_payment
+from services.sheets import add_payment
 from services.users import get_user_info
 from keyboards.main import cancel_kb
 
