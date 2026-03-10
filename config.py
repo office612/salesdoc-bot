@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "VSTAVI_TOKEN")
-SPREADSHEET_ID = "1WJJRqPvQ_i9jVhQgNc2Kuuynneu9jjTJwMGijCZHKho"
+SPREADSHEET_ID = "1eplXgMIfr-xyM3wWMCrPPomeTh6LhCm7zmHc1HoSm8E"
 ACCOUNTANT_CHAT_ID = int(os.getenv("ACCOUNTANT_CHAT_ID", "-1001000000000"))
 TIMEZONE = "Asia/Almaty"
 
