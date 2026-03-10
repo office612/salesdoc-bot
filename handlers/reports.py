@@ -1,13 +1,26 @@
 import logging
 from datetime import date, timedelta
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message
 from services.sheets import get_payments_for_period
 from keyboards.reports import reports_kb
 from services.users import get_user_info
 
 logger = logging.getLogger(__name__)
 router = Router()
+
+
+def format_report(payments: list, title: str) -> str:
+    if not payments:
+        return f"{title}: oplat net."
+    total = sum(p.get('amount', 0) for p in payments)
+    lines = [f"=== {title} ==="]
+    for p in payments:
+        lines.append(
+            f"{p.get('date','')} | {p.get('manager','')} | {p.get('client','')} | {p.get('amount','')} | {p.get('status','')}"
+        )
+    lines.append(f"\nItogo: {total}")
+    return "\n".join(lines)
 
 
 @router.message(F.text == "Otchety")
@@ -63,7 +76,18 @@ async def report_by_manager(message: Message):
     today = date.today()
     start = today.replace(day=1)
     payments = get_payments_for_period(start, today)
-    await message.answer(format_report_by_manager(payments))
+    if not payments:
+        await message.answer("Oplat net za etot mesyats.")
+        return
+    by_mgr = {}
+    for p in payments:
+        m = p.get('manager', 'Neizvestno')
+        by_mgr.setdefault(m, []).append(p)
+    lines = ["=== Po menedzheram (mesyats) ==="]
+    for mgr, plist in by_mgr.items():
+        total = sum(p.get('amount', 0) for p in plist)
+        lines.append(f"{mgr}: {len(plist)} oplat, {total}")
+    await message.answer("\n".join(lines))
 
 
 @router.message(F.text == "Po kategoriyam")
@@ -75,44 +99,41 @@ async def report_by_category(message: Message):
     today = date.today()
     start = today.replace(day=1)
     payments = get_payments_for_period(start, today)
-    await message.answer(format_report_by_category(payments))
-
-
-def format_report(payments: list, title: str) -> str:
     if not payments:
-        return f"<b>{title}</b>\n\nOplat net."
-    total = sum(p.get("amount", 0) for p in payments)
-    lines = [f"<b>{title}</b>", f"Vsego oplat: {len(payments)}", f"Summa: {total:,} tg", ""]
-    for p in payments[-10:]:
-        lines.append(f"- {p.get('manager','?')} | {p.get('amount',0):,} tg | {p.get('status','?')}")
-    return "\n".join(lines)
-
-
-def format_report_by_manager(payments: list) -> str:
-    if not payments:
-        return "<b>Po menedzheram</b>\n\nOplat net."
-    by_mgr = {}
-    for p in payments:
-        mgr = p.get("manager", "?")
-        by_mgr.setdefault(mgr, {"count": 0, "total": 0})
-        by_mgr[mgr]["count"] += 1
-        by_mgr[mgr]["total"] += p.get("amount", 0)
-    lines = ["<b>Po menedzheram (tekushiy mesyats)</b>", ""]
-    for mgr, data in sorted(by_mgr.items(), key=lambda x: -x[1]["total"]):
-        lines.append(f"{mgr}: {data['count']} oplat | {data['total']:,} tg")
-    return "\n".join(lines)
-
-
-def format_report_by_category(payments: list) -> str:
-    if not payments:
-        return "<b>Po kategoriyam</b>\n\nOplat net."
+        await message.answer("Oplat net za etot mesyats.")
+        return
     by_cat = {}
     for p in payments:
-        cat = p.get("category", "?")
-        by_cat.setdefault(cat, {"count": 0, "total": 0})
-        by_cat[cat]["count"] += 1
-        by_cat[cat]["total"] += p.get("amount", 0)
-    lines = ["<b>Po kategoriyam (tekushiy mesyats)</b>", ""]
-    for cat, data in sorted(by_cat.items(), key=lambda x: -x[1]["total"]):
-        lines.append(f"{cat}: {data['count']} oplat | {data['total']:,} tg")
-    return "\n".join(lines)
+        c = p.get('category', 'Neizvestno')
+        by_cat.setdefault(c, []).append(p)
+    lines = ["=== Po kategoriyam (mesyats) ==="]
+    for cat, plist in by_cat.items():
+        total = sum(p.get('amount', 0) for p in plist)
+        lines.append(f"{cat}: {len(plist)} oplat, {total}")
+    await message.answer("\n".join(lines))
+
+
+@router.message(F.text == "Ne posazhenye")
+async def report_unconfirmed(message: Message):
+    user = get_user_info(message.from_user.id)
+    if not user:
+        await message.answer("Ne avtorizovan. /start")
+        return
+    today = date.today()
+    start = today.replace(day=1)
+    payments = get_payments_for_period(start, today)
+    unconf = [p for p in payments if p.get('status', '').lower() not in ('podtverzhdeno', 'confirmed', 'ok')]
+    await message.answer(format_report(unconf, "Ne posazhenye"))
+
+
+@router.message(F.text == "Posazhenye")
+async def report_confirmed(message: Message):
+    user = get_user_info(message.from_user.id)
+    if not user:
+        await message.answer("Ne avtorizovan. /start")
+        return
+    today = date.today()
+    start = today.replace(day=1)
+    payments = get_payments_for_period(start, today)
+    conf = [p for p in payments if p.get('status', '').lower() in ('podtverzhdeno', 'confirmed', 'ok')]
+    await message.answer(format_report(conf, "Posazhenye"))
