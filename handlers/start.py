@@ -6,8 +6,10 @@ from aiogram.fsm.context import FSMContext
 from states import AuthStates
 from services.users import get_user_info, register, get_all_names
 from keyboards.main import main_menu
+
 logger = logging.getLogger(__name__)
 router = Router()
+
 
 def build_names_kb():
     names = get_all_names()
@@ -17,21 +19,40 @@ def build_names_kb():
         rows.append(row)
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
+
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
     user = get_user_info(message.from_user.id)
     if user:
-        await message.answer(f"Привет! <b>{user['name']}</b>", reply_markup=main_menu(user['role']))
-    else:
-        await message.answer("Welcome! Choose name:", reply_markup=build_names_kb())
-        await state.set_state(AuthStates.choose_name)
+        await message.answer(
+            f"Privet! <b>{user['name']}</b>",
+            parse_mode="HTML",
+            reply_markup=main_menu(user.get("role", ""))
+        )
+        return
+    await message.answer(
+        "Dobro pozhalovat! Vyberite vashe imya:",
+        reply_markup=build_names_kb()
+    )
+    await state.set_state(AuthStates.choosing_name)
 
-@router.callback_query(AuthStates.choose_name, F.data.startswith("auth:"))
-async def process_auth(callback: CallbackQuery, state: FSMContext):
-    name = callback.data.split(":", 1)[1]
-    user = register(callback.from_user.id, name)
-    await callback.message.edit_text(f"Authorized as <b>{user['name']}</b>")
-    await callback.message.answer("Menu:", reply_markup=main_menu(user["role"]))
+
+@router.callback_query(F.data.startswith("auth:"))
+async def auth_callback(call: CallbackQuery, state: FSMContext):
+    name = call.data.split(":", 1)[1]
+    user_data = register(call.from_user.id, name)
+    await call.message.answer(
+        f"Privet, <b>{name}</b>! Rol: {user_data['role']}",
+        parse_mode="HTML",
+        reply_markup=main_menu(user_data["role"])
+    )
+    await call.answer()
     await state.clear()
-    await callback.answer()
+
+
+@router.message(Command("help"))
+async def cmd_help(message: Message):
+    await message.answer(
+        "Komandy:\n/start - Nachalo\n/help - Pomosh"
+    )
