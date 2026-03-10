@@ -9,6 +9,14 @@ from services.users import get_user_info
 logger = logging.getLogger(__name__)
 router = Router()
 
+@router.message(F.text == "Otchety")
+async def open_reports_menu_btn(message: Message):
+    user = get_user_info(message.from_user.id)
+    if not user:
+        await message.answer("Ne avtorizovan. /start")
+        return
+    await message.answer("Vyberte tip otcheta:", reply_markup=reports_kb())
+
 @router.message(F.text.in_({"Za segodnya", "Za nedelyu", "Za mesyats", "Po menedzheram", "Po kategoriyam"}))
 async def open_reports_menu(message: Message):
     user = get_user_info(message.from_user.id)
