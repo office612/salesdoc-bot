@@ -28,12 +28,12 @@ async def cmd_start(message: Message, state: FSMContext):
     if user:
         role = user.get("role", "menedzher")
         await message.answer(
-            f"\ud83d\udc4b Privet, <b>{user['name']}</b>!\nRol: <b>{role}</b>",
+            f"👋 Привет, <b>{user['name']}</b>!\nРоль: <b>{role}</b>",
             reply_markup=main_menu(role)
         )
         return
     await message.answer(
-        "\ud83d\udc4b Dobro pozhalovat!\nVyberite vashe imya:",
+        "👋 Добро пожаловать!\nВыберите ваше имя:",
         reply_markup=build_names_kb()
     )
     await state.set_state(AuthStates.choosing_name)
@@ -45,38 +45,38 @@ async def auth_callback(call: CallbackQuery, state: FSMContext):
     user_data = register(call.from_user.id, name)
     role = user_data["role"]
     await call.message.answer(
-        f"\u2705 Privet, <b>{name}</b>!\nRol: <b>{role}</b>",
+        f"✅ Привет, <b>{name}</b>!\nРоль: <b>{role}</b>",
         reply_markup=main_menu(role)
     )
     await call.answer()
     await state.clear()
 
 
-@router.message(F.text == "\ud83d\udc64 Moy profil")
+@router.message(F.text == "👤 Мой профиль")
 async def my_profile(message: Message):
     user = get_user_info(message.from_user.id)
     if not user:
-        await message.answer("Ne avtorizovan. Napishi /start")
+        await message.answer("Не авторизован. Напиши /start")
         return
-    role = user.get("role", "\u2014")
-    name = user.get("name", "\u2014")
-    registered = user.get("registered_at", "\u2014")
+    role = user.get("role", "—")
+    name = user.get("name", "—")
+    registered = user.get("registered_at", "—")
     await message.answer(
-        f"\ud83d\udc64 <b>Moy profil</b>\n\n"
-        f"Imya: <b>{name}</b>\n"
-        f"Rol: <b>{role}</b>\n"
+        f"👤 <b>Мой профиль</b>\n\n"
+        f"Имя: <b>{name}</b>\n"
+        f"Роль: <b>{role}</b>\n"
         f"Telegram ID: <code>{message.from_user.id}</code>\n"
-        f"Registratsiya: {registered}"
+        f"Регистрация: {registered}"
     )
 
 
 @router.message(Command("help"))
 async def cmd_help(message: Message):
     await message.answer(
-        "\ud83d\udcd6 <b>Komandy:</b>\n"
-        "/start \u2014 Nachalo\n"
-        "/help \u2014 Pomosh\n\n"
-        "\ud83d\udcb3 <b>Vnesit oplatu</b> \u2014 dobavit novuyu oplatu\n"
-        "\ud83d\udcca <b>Otchety</b> \u2014 prosmotr otchetov\n"
-        "\ud83d\udc64 <b>Moy profil</b> \u2014 vashi dannye"
+        "📖 <b>Команды:</b>\n"
+        "/start — Начало\n"
+        "/help — Помощь\n\n"
+        "💳 <b>Внести оплату</b> — добавить оплату\n"
+        "📊 <b>Отчёты</b> — просмотр отчётов\n"
+        "👤 <b>Мой профиль</b> — ваши данные"
     )
