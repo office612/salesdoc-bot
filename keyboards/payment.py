@@ -49,6 +49,13 @@ def skip_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⏭ Propustit", callback_data="skip")]])
 
 
+def amount_suggest_kb(suggested) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"✅ {suggested}", callback_data=f"use_amount:{suggested}")],
+        [InlineKeyboardButton(text="✏ Vvesti vruchnuyu", callback_data="enter_amount")]
+    ])
+
+
 def seat_payment_kb(row_num: int, month: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✅ Posadit", callback_data=f"seat:{row_num}:{month}")]
