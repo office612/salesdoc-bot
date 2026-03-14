@@ -12,4 +12,4 @@ class PaymentStates(StatesGroup):
 
 
 class AuthStates(StatesGroup):
-    choose_name = State()
+    choosing_name = State()
