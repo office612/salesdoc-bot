@@ -21,7 +21,9 @@ def format_summary(data: dict) -> str:
         f"📦 Статья: <b>{data.get('category', '—')}</b>\n"
         f"📄 Лицензия: <b>{data.get('license_type', '—')}</b>\n"
         f"🏢 Клиент: <b>{data.get('client', '—')}</b>\n"
+        f"🔢 Кол-во: <b>{data.get('qty', '—')}</b>\n"
         f"⏱ Тариф: <b>{data.get('period', '—')}</b>\n"
+        f"💵 Цена: <b>{data.get('price', '—')}</b>\n"
         f"💰 Сумма: <b>{data.get('amount', '—')}</b>\n"
         f"🏦 Банк: <b>{data.get('bank', '—')}</b>\n"
         f"👤 Менеджер: <b>{data.get('manager', '—')}</b>"
@@ -43,7 +45,6 @@ async def start_payment(message: Message, state: FSMContext):
 @router.callback_query(PaymentStates.choose_category, F.data.startswith('cat:'))
 async def choose_category(callback: CallbackQuery, state: FSMContext):
     cat_id = callback.data.split(':', 1)[1]
-    # Сохраняем русское название точно как в таблице
     cat_label = next((label for key, label in CATEGORIES if key == cat_id), cat_id)
     await state.update_data(category=cat_label)
     await callback.message.edit_text('📄 Тип лицензии:', reply_markup=license_types_kb())
@@ -63,6 +64,19 @@ async def choose_license(callback: CallbackQuery, state: FSMContext):
 @router.message(PaymentStates.enter_client)
 async def enter_client(message: Message, state: FSMContext):
     await state.update_data(client=message.text.strip())
+    await message.answer('🔢 Введите кол-во лицензий (число):')
+    await state.set_state(PaymentStates.enter_qty)
+
+
+@router.message(PaymentStates.enter_qty)
+async def enter_qty(message: Message, state: FSMContext):
+    text = message.text.strip()
+    try:
+        qty = int(text)
+    except ValueError:
+        await message.answer('❌ Введите целое число, например: 1')
+        return
+    await state.update_data(qty=qty)
     await message.answer('⏱ Выберите тариф:', reply_markup=periods_kb())
     await state.set_state(PaymentStates.choose_period)
 
@@ -71,9 +85,22 @@ async def enter_client(message: Message, state: FSMContext):
 async def choose_period(callback: CallbackQuery, state: FSMContext):
     period = callback.data.split(':', 1)[1]
     await state.update_data(period=period)
-    await callback.message.edit_text('💰 Введите сумму (цифры):')
-    await state.set_state(PaymentStates.enter_amount)
+    await callback.message.edit_text('💵 Введите цену за 1 лицензию:')
+    await state.set_state(PaymentStates.enter_price)
     await callback.answer()
+
+
+@router.message(PaymentStates.enter_price)
+async def enter_price(message: Message, state: FSMContext):
+    text = message.text.strip().replace(' ', '').replace(',', '.')
+    try:
+        price = float(text)
+    except ValueError:
+        await message.answer('❌ Введите число, например: 5000')
+        return
+    await state.update_data(price=price)
+    await message.answer('💰 Введите сумму оплаты:')
+    await state.set_state(PaymentStates.enter_amount)
 
 
 @router.message(PaymentStates.enter_amount)
@@ -106,11 +133,11 @@ async def confirm_payment_handler(callback: CallbackQuery, state: FSMContext):
         'company':      data.get('client', ''),
         'category_raw': data.get('category', ''),
         'license_type': data.get('license_type', ''),
-        'license_qty':  '',
+        'license_qty':  str(data.get('qty', '')),
         'manager':      data.get('manager', ''),
-        'tariff':       '',
-        'price':        '',
-        'period':       data.get('period', ''),
+        'tariff':       data.get('period', ''),
+        'price':        str(data.get('price', '')),
+        'period':       str(data.get('qty', '')),
         'amount':       data.get('amount', ''),
         'bank':         data.get('bank', ''),
     }
