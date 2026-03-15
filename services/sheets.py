@@ -15,13 +15,12 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-# Структура таблицы Доходы KZ 2026:
-# A=Дата B=Компания C=Статья D=Лицензии E=Кол-во F=Менеджер
-# G=Тариф H=Цена I=Период J=Сумма K=Банк L=Оплата посажена
-# Строки 1-6 — заголовки, данные начинаются с строки 7
-DATA_START_ROW = 7  # строки 1-6 заняты заголовками
+# Ð¡ÑÑÑÐºÑÑÑÐ° ÑÐ°Ð±Ð»Ð¸ÑÑ ÐÐ¾ÑÐ¾Ð´Ñ KZ 2026:
+# A=ÐÐ°ÑÐ° B=ÐÐ¾Ð¼Ð¿Ð°Ð½Ð¸Ñ C=Ð¡ÑÐ°ÑÑÑ D=ÐÐ¸ÑÐµÐ½Ð·Ð¸Ð¸ E=ÐÐ¾Ð»-Ð²Ð¾ F=ÐÐµÐ½ÐµÐ´Ð¶ÐµÑ
+# G=Ð¢Ð°ÑÐ¸Ñ H=Ð¦ÐµÐ½Ð° I=ÐÐµÑÐ¸Ð¾Ð´ J=Ð¡ÑÐ¼Ð¼Ð° K=ÐÐ°Ð½Ðº L=ÐÐ¿Ð»Ð°ÑÐ° Ð¿Ð¾ÑÐ°Ð¶ÐµÐ½Ð°
+# Ð¡ÑÑÐ¾ÐºÐ¸ 1-6 â Ð·Ð°Ð³Ð¾Ð»Ð¾Ð²ÐºÐ¸, Ð´Ð°Ð½Ð½ÑÐµ Ð½Ð°ÑÐ¸Ð½Ð°ÑÑÑÑ Ñ ÑÑÑÐ¾ÐºÐ¸ 7
+DATA_START_ROW = 7
 
-# Индексы колонок (0-based)
 COL_DATE     = 0   # A
 COL_COMPANY  = 1   # B
 COL_ARTICLE  = 2   # C
@@ -72,51 +71,48 @@ def get_or_create_users_sheet() -> gspread.Worksheet:
         return ws
 
 
-def find_last_data_row(ws: gspread.Worksheet) -> int:
-    """Ищет первую пустую строку начиная с DATA_START_ROW."""
-    col_a = ws.col_values(1)  # колонка A (Дата)
-    # Строки 1-6 — заголовки, ищем первую пустую после них
-    for i in range(DATA_START_ROW - 1, len(col_a)):
-        if not str(col_a[i]).strip():
-            return i + 1  # 1-based
-    return len(col_a) + 1
-
-
 def add_payment(data: dict) -> int:
+    """
+    ÐÐ°Ð¿Ð¸ÑÑÐ²Ð°ÐµÑ Ð¾Ð¿Ð»Ð°ÑÑ ÑÐµÑÐµÐ· append_row (Ð½Ðµ insert_row).
+    insert_row Ð½Ðµ ÑÐ°Ð±Ð¾ÑÐ°ÐµÑ Ð½Ð° Ð·Ð°ÑÐ¸ÑÑÐ½Ð½ÑÑ Ð»Ð¸ÑÑÐ°ÑÐ¼Ðµ.
+    """
     ws = get_current_sheet()
-    row_num = find_last_data_row(ws)
     tz = pytz.timezone(TIMEZONE)
-    today = datetime.now(tz).strftime('%d.%m.%Y')
-    # Заполняем по структуре таблицы:
-    # A=Дата B=Компания C=Статья D=Лицензии E=Кол-во F=Менеджер
-    # G=Тариф H=Цена I=Период J=Сумма K=Банк L=Оплата посажена
+    today = datetime.now(tz).strftime("%d.%m.%Y")
+
     row = [
-        today,                           # A - Дата
-        data.get('company', ''),         # B - Компания
-        data.get('category_raw', ''),    # C - Статья
-        data.get('license_type', ''),    # D - Лицензии
-        data.get('license_qty', ''),     # E - Кол-во
-        data.get('manager', ''),         # F - Менеджер
-        data.get('tariff', ''),          # G - Тариф
-        data.get('price', ''),           # H - Цена
-        data.get('period', ''),          # I - Период
-        data.get('amount', ''),          # J - Сумма
-        data.get('bank', ''),            # K - Банк
-        'Нет',            # L - Оплата посажена
+        today,                           # A - ÐÐ´Ð°ÑÐ°
+        data.get("company", ""),         # B - ÐÐ¾Ð¼Ð¿Ð°Ð½Ð¸Ñ
+        data.get("category_raw", ""),    # C - Ð¡ÑÐ°ÑÑÑ
+        data.get("license_type", ""),    # D - ÐÐ¸ÑÐµÐ½Ð·Ð¸Ð¸
+        data.get("license_qty", ""),     # E - ÐÐ¾Ð»ÐºÐ¾Ñ
+        data.get("manager", ""),         # F - ÐÐµÐ½ÐµÐ´Ð¶ÐµÑ
+        data.get("tariff", ""),          # G - Ð¢Ð°ÑÐ¸Ñ
+        data.get("price", ""),           # H - Ð¦ÐµÐ½Ð°
+        data.get("period", ""),          # I - ÐÐµÑÐ¸Ð¾Ð´
+        data.get("amount", ""),          # J - Ð¡ÑÐ¼Ð¼Ð°
+        data.get("bank", ""),            # K - ÐÐ°Ð½Ð»
+        "ÐÐµÑ",                         # L - ÐÐ¿Ð»Ð°ÑÐ° Ð¿Ð¾ÑÐ°Ð¶ÐµÐ½Ð°
     ]
-    ws.insert_row(row, row_num)
-    logger.info(f'Added payment row={row_num} company={data.get("company")} amount={data.get("amount")}')
+
+    # append_row Ð´Ð¾Ð±Ð°Ð²Ð»ÑÐµÑ Ð² ÐºÐ¾Ð½ÐµÑ â ÑÐ°Ð±Ð¾ÑÐ°ÐµÑ Ð½Ð° Ð·Ð°ÑÐ¸ÑÑÐ½Ð½ÑÑ Ð»Ð¸ÑÑÐ°Ñ
+    ws.append_row(row, value_input_option="USER_ENTERED")
+
+    # ÐÐ¿ÑÐµÐ´ÐµÐ»ÑÐµÐ¼ Ð½Ð¾Ð¼ÐµÑ ÑÑÑÐ¾ÐºÐ¸ Ð´Ð»Ñ Ð¾ÑÑÑÑÐ°
+    col_a = ws.col_values(1)
+    row_num = len(col_a)
+    logger.info("Added payment row=" + str(row_num) + " company=" + str(data.get("company")))
     return row_num
 
 
 def confirm_payment(row_num: int, month: int) -> bool:
     try:
         ws = get_sheet_by_month(month)
-        ws.update_cell(row_num, COL_SEATED + 1, 'Да')  # колонка L
-        logger.info(f'Confirmed payment row={row_num}')
+        ws.update_cell(row_num, COL_SEATED + 1, "ÐÐ°")
+        logger.info("Confirmed payment row=" + str(row_num))
         return True
     except Exception as e:
-        logger.error(f'Error confirming: {e}')
+        logger.error("Error confirming: " + str(e))
         return False
 
 
@@ -130,41 +126,45 @@ def get_payments_for_period(start_date: date, end_date: date) -> list:
             current = current.replace(year=current.year + 1, month=1, day=1)
         else:
             current = current.replace(month=current.month + 1, day=1)
+
     for month in months_needed:
         try:
             ws = get_sheet_by_month(month)
             rows = ws.get_all_values()
-            # Пропускаем первые 6 строк-заголовков
+            # ÐÑÐ¾Ð¿ÑÑÐºÐ°ÐµÐ¼ Ð¿ÐµÑÐ²ÑÐµ 6 ÑÑÑÐ¾Ðº (Ð·Ð°Ð³Ð¾Ð»Ð¾Ð²ÐºÐ¸)
             data_rows = rows[DATA_START_ROW - 1:]
             for i, row in enumerate(data_rows, start=DATA_START_ROW):
                 if not row or not str(row[COL_DATE]).strip():
                     continue
                 try:
-                    row_date = datetime.strptime(row[COL_DATE].strip(), '%d.%m.%Y').date()
+                    row_date = datetime.strptime(row[COL_DATE].strip(), "%d.%m.%Y").date()
                 except ValueError:
                     continue
                 if start_date <= row_date <= end_date:
-                    amount = _parse_amount(row[COL_AMOUNT] if len(row) > COL_AMOUNT else '')
+                    amount = _parse_amount(row[COL_AMOUNT] if len(row) > COLAMMoUNT else "")
+                    # ÐÐ¾ÑÐ°Ð´ÐºÐ° Ð±ÐµÑÑÑÑÑ Ð¸Ð· ÐºÐ¾Ð»Ð¾Ð½ÐºÐ¸ Ð
+                    seated_val = row[COL_SEATED].strip() if len(row) > COL_SEATED else "ÐÐµÑ"
                     payments.append({
-                        'row_num':  i,
-                        'month':    month,
-                        'date':     row_date,
-                        'company':  row[COL_COMPANY]  if len(row) > COL_COMPANY  else '',
-                        'category': row[COL_ARTICLE]  if len(row) > COL_ARTICLE  else '',
-                        'manager':  row[COL_MANAGER]  if len(row) > COL_MANAGER  else '',
-                        'period':   row[COL_PERIOD]   if len(row) > COL_PERIOD   else '',
-                        'amount':   amount,
-                        'bank':     row[COL_BANK]     if len(row) > COL_BANK     else '',
-                        'seated':   row[COL_SEATED]   if len(row) > COL_SEATED   else 'Нет',
+                        "row_num":  i,
+                        "month":    month,
+                        "date":     row_date,
+                        "company":  row[COL_COMPANY]  if len(row) > COL_COMPANY  else "",
+                        "category": row[COL_ARTICLE]  if len(row) > COL_ARTICLE  else "",
+                        "manager":  row[COL_MANAGER]  if len(row) > COL_MANAGER  else "",
+                        "period":   row[COL_PERIOD]   if len(row) > COL_PERIOD   else "",
+                        "amount":   amount,
+                        "bank":     row[COL_BANK]     if len(row) > COL_BANK     else "",
+                        "seated":   seated_val,
                     })
         except Exception as e:
-            logger.warning(f'Error reading sheet month={month}: {e}')
-    return sorted(payments, key=lambda x: x['date'], reverse=True)
+            logger.warning("Error reading sheet month=" + str(month) + ": " + str(e))
+
+    return sorted(payments, key=lambda x: x["date"], reverse=True)
 
 
 def _parse_amount(val: str) -> int:
     try:
-        clean = str(val).replace(' ', '').replace(',', '.').replace(' ', '')
+        clean = str(val).replace(" ", "").replace(",", ".").replace("\u00a0", "")
         return int(float(clean))
     except (ValueError, TypeError):
         return 0
@@ -175,10 +175,10 @@ def get_user(telegram_id: int) -> Optional[dict]:
         ws = get_or_create_users_sheet()
         rows = ws.get_all_records()
         for row in rows:
-            if str(row.get('telegram_id')) == str(telegram_id):
+            if str(row.get("telegram_id")) == str(telegram_id):
                 return row
     except Exception as e:
-        logger.error(f'Error getting user: {e}')
+        logger.error("Error getting user: " + str(e))
     return None
 
 
@@ -186,9 +186,9 @@ def register_user(telegram_id: int, name: str, role: str) -> bool:
     try:
         ws = get_or_create_users_sheet()
         tz = pytz.timezone(TIMEZONE)
-        now = datetime.now(tz).strftime('%d.%m.%Y %H:%M')
+        now = datetime.now(tz).strftime("%d.%m.%Y %H:%M")
         ws.append_row([str(telegram_id), name, role, now])
         return True
     except Exception as e:
-        logger.error(f'Error register_user: {e}')
+        logger.error("Error register_user: " + str(e))
         return False
