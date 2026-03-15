@@ -16,8 +16,6 @@ def main_menu(role: str) -> ReplyKeyboardMarkup:
 
 
 def cancel_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[[
-            InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")
-        ]]
-    )
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")
+    ]])
