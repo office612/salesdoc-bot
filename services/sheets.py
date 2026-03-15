@@ -5,7 +5,6 @@ import os
 from datetime import datetime, date
 from typing import Optional
 import pytz
-
 from google.oauth2.service_account import Credentials
 from config import SPREADSHEET_ID, MONTH_SHEETS, TIMEZONE
 
@@ -16,28 +15,19 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-_client: Optional[gspread.Client] = None
-_spreadsheet: Optional[gspread.Spreadsheet] = None
-
 
 def get_client() -> gspread.Client:
-    global _client
-    if _client is None:
-        google_creds_json = os.getenv("GOOGLE_CREDENTIALS")
-        if google_creds_json:
-            creds_dict = json.loads(google_creds_json)
-            creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-        else:
-            creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
-        _client = gspread.authorize(creds)
-    return _client
+    google_creds_json = os.getenv("GOOGLE_CREDENTIALS")
+    if google_creds_json:
+        creds_dict = json.loads(google_creds_json)
+        creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+    else:
+        creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+    return gspread.authorize(creds)
 
 
 def get_spreadsheet() -> gspread.Spreadsheet:
-    global _spreadsheet
-    if _spreadsheet is None:
-        _spreadsheet = get_client().open_by_key(SPREADSHEET_ID)
-    return _spreadsheet
+    return get_client().open_by_key(SPREADSHEET_ID)
 
 
 def get_current_sheet() -> gspread.Worksheet:
@@ -86,14 +76,12 @@ def add_payment(data: dict) -> int:
         data.get("bank", ""),
         "Net",
         data.get("amount", ""),
-        "",
-        "",
-        "",
+        "", "", "",
         data.get("comment", ""),
         "",
     ]
     ws.insert_row(row, row_num)
-    logger.info(f"Added payment row {row_num}: {data.get('company')} - {data.get('amount')}")
+    logger.info("Added payment row " + str(row_num));
     return row_num
 
 
@@ -101,15 +89,14 @@ def confirm_payment(row_num: int, month: int) -> bool:
     try:
         ws = get_sheet_by_month(month)
         ws.update_cell(row_num, 12, "Yes")
-        logger.info(f"Confirmed payment row {row_num}")
+        logger.info("Confirmed payment row " + str(row_num))
         return True
     except Exception as e:
-        logger.error(f"Error confirming payment: {e}")
+        logger.error("Error confirming payment: " + str(e))
         return False
 
 
 def get_payments_for_period(start_date: date, end_date: date) -> list[dict]:
-    tz = pytz.timezone(TIMEZONE)
     payments = []
     months_needed = set()
     current = start_date
@@ -131,19 +118,10 @@ def get_payments_for_period(start_date: date, end_date: date) -> list[dict]:
                 except ValueError:
                     continue
                 if start_date <= row_date <= end_date:
-                    payments.append({
-                        "row_num": i,
-                        "month": month,
-                        "date": row_date,
-                        "company": row[1] if len(row) > 1 else "",
-                        "category": row[2] if len(row) > 2 else "",
-                        "manager": row[5] if len(row) > 5 else "",
-                        "amount": _parse_amount(row[9]) if len(row) > 9 else 0,
-                        "seated": row[11] if len(row) > 11 else "Net",
-                    })
+                    payments.append({"row_num": i, "month": month})
         except Exception as e:
-            logger.warning(f"Error reading sheet month {month}: {e}")
-    return sorted(payments, key=lambda x: x["date"], reverse=True)
+            logger.warning("Error: " + str(e))
+    return payments
 
 
 def _parse_amount(val: str) -> int:
@@ -161,7 +139,7 @@ def get_user(telegram_id: int) -> Optional[dict]:
             if str(row.get("telegram_id")) == str(telegram_id):
                 return row
     except Exception as e:
-        logger.error(f"Error getting user: {e}")
+        logger.error("Error getting user: " + str(e))
     return None
 
 
@@ -173,5 +151,5 @@ def register_user(telegram_id: int, name: str, role: str) -> bool:
         ws.append_row([str(telegram_id), name, role, now])
         return True
     except Exception as e:
-        logger.error(f"Error registering user: {e}")
+        logger.error("Error register_user: " + str(e))
         return False
