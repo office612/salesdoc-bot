@@ -22,17 +22,27 @@ MONTH_SHEETS = {
         9: "Сен", 10: "Окт", 11: "Ноя", 12: "Дек",
 }
 
-LEADER = "Mirzahait"
+LEADER = "Мирзахит"
 EMPLOYEES = {
-        "managers": ["Aidos", "Aidos Hapez", "Yulia", "Akbar", "Samat"],
-        "accountants": ["Gulshan", "Aurika"],
+        "managers": ["Мирзахит", "Айдос Хапез", "Юлия", "Акбар", "Самат"],
+        "accountants": ["Гульшан", "Аурика"],
 }
 
+# Статья (колонка C) — как в раскрывающемся списке таблицы
 CATEGORIES = [
-        ("salesdoc", "SalesDoc"),
-        ("other", "Drugoe"),
+        ("abon_plata",   "абон. плата"),
+        ("dop_lic",      "доп. лицензии"),
+        ("oplata_dolga", "Оплата долга"),
+        ("nakladnaya",   "наклодная"),
+        ("balans",       "баланс"),
+        ("usluga",       "Услуга"),
 ]
 
-LICENSE_TYPES = ["Bazoviy", "Standart", "Premium"]
-PERIODS = ["1 mes", "3 mes", "6 mes", "12 mes"]
-BANKS = ["Kaspi", "Halyk", "BCC", "Jusan", "Forte"]
+# Лицензии аген/экс/мерч... (колонка D)
+LICENSE_TYPES = ["Лицензии", "Баланс", "Услуга"]
+
+# Тариф (колонка G)
+PERIODS = ["Месячный", "3 месячный", "6 месячный", "12 месяцев", "Баланс", "Услуга"]
+
+# Банк (колонка K)
+BANKS = ["каспи", "халык", "Forte", "BCC", "Jusan"]
