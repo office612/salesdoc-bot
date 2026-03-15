@@ -141,7 +141,7 @@ def get_payments_for_period(start_date: date, end_date: date) -> list:
                 except ValueError:
                     continue
                 if start_date <= row_date <= end_date:
-                    amount = _parse_amount(row[COL_AMOUNT] if len(row) > COLAMMoUNT else "")
+                    amount = _parse_amount(row[COL_AMOUNT] if len(row) > COL_AMOUNT else "")
                     # ÐÐ¾ÑÐ°Ð´ÐºÐ° Ð±ÐµÑÑÑÑÑ Ð¸Ð· ÐºÐ¾Ð»Ð¾Ð½ÐºÐ¸ Ð
                     seated_val = row[COL_SEATED].strip() if len(row) > COL_SEATED else "ÐÐµÑ"
                     payments.append({
