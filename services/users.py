@@ -4,16 +4,16 @@ from services.sheets import get_user, register_user
 
 def get_role(name: str) -> str:
     if name == LEADER:
-        return "rukovoditel"
-    if name in EMPLOYEES["managers"]:
-        return "menedzher"
-    if name in EMPLOYEES["accountants"]:
-        return "buhgalter"
-    return "menedzher"
+        return 'rukovoditel'
+    if name in EMPLOYEES['managers']:
+        return 'menedzher'
+    if name in EMPLOYEES['accountants']:
+        return 'buhgalter'
+    return 'menedzher'
 
 
-def get_all_names() -> list[str]:
-    return EMPLOYEES["managers"] + EMPLOYEES["accountants"]
+def get_all_names() -> list:
+    return EMPLOYEES['managers'] + EMPLOYEES['accountants']
 
 
 def get_user_info(telegram_id: int) -> dict | None:
@@ -23,16 +23,16 @@ def get_user_info(telegram_id: int) -> dict | None:
 def register(telegram_id: int, name: str) -> dict:
     role = get_role(name)
     register_user(telegram_id, name, role)
-    return {"name": name, "role": role}
+    return {'name': name, 'role': role}
 
 
 def is_manager(user: dict) -> bool:
-    return user.get("role") in ("menedzher", "rukovoditel")
+    return user.get('role') in ('menedzher', 'rukovoditel')
 
 
 def is_accountant(user: dict) -> bool:
-    return user.get("role") in ("buhgalter", "rukovoditel")
+    return user.get('role') in ('buhgalter', 'rukovoditel')
 
 
 def is_leader(user: dict) -> bool:
-    return user.get("role") == "rukovoditel"
+    return user.get('role') == 'rukovoditel'
