@@ -1,5 +1,5 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from config import CATEGORIES, LICENSE_TYPES, PERIODS, BANKS
+from config import CATEGORIES, LICENSE_TYPES, PERIODS, BANKS, MONTH_SHEETS
 
 
 def categories_kb() -> InlineKeyboardMarkup:
