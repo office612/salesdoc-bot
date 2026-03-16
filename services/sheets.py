@@ -92,7 +92,7 @@ def add_payment(data: dict) -> int:
         data.get("manager", ""),
         data.get("tariff", ""),
         data.get("price", ""),
-        f'=ЕСЛИ(G{next_row}="";"";IF(G{next_row}="Месячный";1;IF(G{next_row}="3 месячный";3;IF(G{next_row}="6 месячный";6;IF(G{next_row}="12 месяцев";12;1)))))',
+        f'=ЕСЛИ(G{next_row}="";"";ЕСЛИ(G{next_row}="Месячный";1;ЕСЛИ(G{next_row}="3 месячный";3;ЕСЛИ(G{next_row}="6 месячный";6;ЕСЛИ(G{next_row}="12 месяцев";12;1)))))',
         j_formula,
         data.get("bank", ""),
         "Нет",
