@@ -92,7 +92,7 @@ def add_payment(data: dict) -> int:
         data.get("manager", ""),
         data.get("tariff", ""),
         data.get("price", ""),
-        "",              # I — не записываем, там своя формула таблицы (конвертация тарифа в месяцы)
+        f'=IF(G{next_row}="","",IF(G{next_row}="Месячный",1,IF(G{next_row}="3 месячный",3,IF(G{next_row}="6 месячный",6,IF(G{next_row}="12 месяцев",12,1)))))',
         j_formula,
         data.get("bank", ""),
         "Нет",
