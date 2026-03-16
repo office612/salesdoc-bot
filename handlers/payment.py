@@ -46,7 +46,7 @@ async def notify_all(bot, data: dict, row_num: int):
         f'💰 <b>Новая оплата!</b>\n\n'
         f'📅 Месяц: <b>{month_name}</b>\n'
         f'🏢 <b>{data.get("client", "—")}</b>\n'
-        f'💰 {data.get("amount", "—")} тг — {data.get("bank", "—")}\n'
+        f'💰 {data.get("qty", "—")} × {data.get("price", "—")} тг — {data.get("bank", "—")}\n'
         f'📦 {data.get("category", "—")} | {data.get("license_type", "—")}\n'
         f'👤 {data.get("manager", "—")}'
         f'{fact_str}\n'
@@ -182,12 +182,10 @@ async def confirm_payment_handler(callback: CallbackQuery, state: FSMContext):
         'company':      data.get('client', ''),
         'category_raw': data.get('category', ''),
         'license_type': data.get('license_type', ''),
-        'license_qty':  str(data.get('qty', '')),
+        'license_qty':  data.get('qty', 0),
         'manager':      data.get('manager', ''),
         'tariff':       data.get('period', ''),
-        'price':        str(data.get('price', '')),
-        'period':       str(data.get('qty', '')),
-        'amount':       data.get('amount', ''),
+        'price':        data.get('price', 0),
         'bank':         data.get('bank', ''),
         'fact_amount':  data.get('fact_amount', ''),
         'month':        data.get('month'),
@@ -199,7 +197,7 @@ async def confirm_payment_handler(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text(
             f'✅ <b>Оплата записана!</b>\n\n'
             f'📅 {month_name}\n'
-            f'🏢 {data.get("client")} — {data.get("amount")} тг\n'
+            f'🏢 {data.get("client")} | {data.get("qty")} × {data.get("price")} тг\n'
             f'📊 Доходы KZ 2026, строка {row_num}'
         )
         await notify_all(callback.bot, data, row_num)
