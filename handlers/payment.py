@@ -136,20 +136,9 @@ async def enter_price(message: Message, state: FSMContext):
         await message.answer('❌ Число, например: 5000')
         return
     await state.update_data(price=price)
-    await message.answer('💰 Сумма (озвученная клиенту):')
-    await state.set_state(PaymentStates.enter_amount)
-
-
-@router.message(PaymentStates.enter_amount)
-async def enter_amount(message: Message, state: FSMContext):
-    try:
-        amount = float(message.text.strip().replace(' ', '').replace(',', '.'))
-    except ValueError:
-        await message.answer('❌ Число, например: 50000')
-        return
-    await state.update_data(amount=amount)
     await message.answer('🏦 Банк:', reply_markup=banks_kb())
     await state.set_state(PaymentStates.choose_bank)
+
 
 
 @router.callback_query(PaymentStates.choose_bank, F.data.startswith('bank:'))
@@ -226,4 +215,5 @@ async def cancel_handler(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.message.edit_text('❌ Отменено.')
     await callback.answer()
+
 
