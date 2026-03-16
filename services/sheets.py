@@ -78,8 +78,12 @@ def add_payment(data: dict) -> int:
     tz = pytz.timezone(TIMEZONE)
     today = datetime.now(tz).strftime("%d.%m.%Y")
 
-    col_a = ws.col_values(1)
-    next_row = len(col_a) + 1
+    all_vals = ws.get_all_values()
+    next_row = DATA_START_ROW
+    for i in range(len(all_vals) - 1, DATA_START_ROW - 2, -1):
+        if any(cell.strip() for cell in all_vals[i]):
+            next_row = i + 2
+            break
 
     j_formula = f'=ЕСЛИ(ИЛИ(E{next_row}="";H{next_row}="";I{next_row}="");"";E{next_row}*H{next_row}*I{next_row})'
 
