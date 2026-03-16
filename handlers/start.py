@@ -3,7 +3,7 @@ from aiogram import Router, F
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import CommandStart
 
-from services.users import get_user_info, register
+from services.users import get_user_info, register, fix_legacy_name
 from keyboards.main import main_menu
 from config import LEADER, EMPLOYEES
 
@@ -17,6 +17,7 @@ ALL_NAMES = EMPLOYEES["managers"] + EMPLOYEES["accountants"] + [LEADER]
 async def cmd_start(message: Message):
     user = get_user_info(message.from_user.id)
     if user:
+        user = fix_legacy_name(message.from_user.id, user)
         role = user.get("role", "menedzher")
         name = user.get("name", "")
         await message.answer(

@@ -15,11 +15,6 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-# Структура таблицы Доходы KZ 2026:
-# A=Дата B=Компания C=Статья D=Лицензии E=Кол-во F=Менеджер
-# G=Тариф H=Цена I=Период J=Сумма клиенту K=Банк L=Оплата посажена
-# M=Сумма фактической оплаты
-# Строки 1-6 — заголовки, данные начинаются с строки 7
 DATA_START_ROW = 7
 
 COL_DATE     = 0   # A
@@ -31,10 +26,10 @@ COL_MANAGER  = 5   # F
 COL_TARIFF   = 6   # G
 COL_PRICE    = 7   # H
 COL_PERIOD   = 8   # I
-COL_AMOUNT   = 9   # J — сумма клиенту
+COL_AMOUNT   = 9   # J
 COL_BANK     = 10  # K
-COL_SEATED   = 11  # L — оплата посажена (Да/Нет)
-COL_FACT     = 12  # M — сумма фактической оплаты
+COL_SEATED   = 11  # L
+COL_FACT     = 12  # M
 
 
 def get_client() -> gspread.Client:
@@ -74,42 +69,51 @@ def get_or_create_users_sheet() -> gspread.Worksheet:
 
 
 def add_payment(data: dict) -> int:
-    """
-    Записывает оплату через append_row (не insert_row).
-    insert_row не работает на защищённых листах.
-    """
-    ws = get_current_sheet()
+    month = data.get("month")
+    if month:
+        ws = get_sheet_by_month(int(month))
+    else:
+        ws = get_current_sheet()
+
     tz = pytz.timezone(TIMEZONE)
     today = datetime.now(tz).strftime("%d.%m.%Y")
 
+    col_a = ws.col_values(1)
+    next_row = len(col_a) + 1
+
+    j_formula = (
+        f'=ЕСЛИ(ИЛИ(E{next_row}="";H{next_row}="";I{next_row}="");"";'
+        f'E{next_row}*H{next_row}*I{next_row})'
+    )
+
     row = [
-        today,                           # A — Дата
-        data.get("company", ""),         # B — Компания
-        data.get("category_raw", ""),    # C — Статья
-        data.get("license_type", ""),    # D — Лицензии
-        data.get("license_qty", ""),     # E — Кол-во
-        data.get("manager", ""),         # F — Менеджер
-        data.get("tariff", ""),          # G — Тариф
-        data.get("price", ""),           # H — Цена
-        data.get("period", ""),          # I — Период
-        data.get("amount", ""),          # J — Сумма
-        data.get("bank", ""),            # K — Банк
-        "Нет",                           # L — Оплата посажена
+        today,
+        data.get("company", ""),
+        data.get("category_raw", ""),
+        data.get("license_type", ""),
+        data.get("license_qty", ""),
+        data.get("manager", ""),
+        data.get("tariff", ""),
+        data.get("price", ""),
+        data.get("period", ""),
+        j_formula,
+        data.get("bank", ""),
+        "Нет",
     ]
 
-    ws.append_row(row, value_input_option="USER_ENTERED")
+    fact = data.get("fact_amount", "")
+    if fact not in ("", None):
+        row.append(fact)
 
-    col_a = ws.col_values(1)
-    row_num = len(col_a)
-    logger.info("Added payment row=" + str(row_num) + " company=" + str(data.get("company")))
-    return row_num
+    ws.append_row(row, value_input_option="USER_ENTERED")
+    logger.info("Added row=" + str(next_row) + " month=" + str(month))
+    return next_row
 
 
 def confirm_payment(row_num: int, month: int) -> bool:
     try:
         ws = get_sheet_by_month(month)
         ws.update_cell(row_num, COL_SEATED + 1, "Да")
-        logger.info("Confirmed payment row=" + str(row_num))
         return True
     except Exception as e:
         logger.error("Error confirming: " + str(e))
@@ -140,15 +144,12 @@ def get_payments_for_period(start_date: date, end_date: date) -> list:
                 except ValueError:
                     continue
                 if start_date <= row_date <= end_date:
-                    # Сумма: берём M (факт) если заполнено, иначе J (клиент)
                     fact_val = row[COL_FACT].strip() if len(row) > COL_FACT else ""
                     j_val    = row[COL_AMOUNT].strip() if len(row) > COL_AMOUNT else ""
                     amount   = _parse_amount(fact_val if fact_val else j_val)
                     seated_val = row[COL_SEATED].strip() if len(row) > COL_SEATED else "Нет"
                     payments.append({
-                        "row_num":  i,
-                        "month":    month,
-                        "date":     row_date,
+                        "row_num":  i, "month": month, "date": row_date,
                         "company":  row[COL_COMPANY]  if len(row) > COL_COMPANY  else "",
                         "category": row[COL_ARTICLE]  if len(row) > COL_ARTICLE  else "",
                         "manager":  row[COL_MANAGER]  if len(row) > COL_MANAGER  else "",
@@ -158,7 +159,7 @@ def get_payments_for_period(start_date: date, end_date: date) -> list:
                         "seated":   seated_val,
                     })
         except Exception as e:
-            logger.warning("Error reading sheet month=" + str(month) + ": " + str(e))
+            logger.warning("Error reading month=" + str(month) + ": " + str(e))
 
     return sorted(payments, key=lambda x: x["date"], reverse=True)
 
@@ -188,7 +189,14 @@ def register_user(telegram_id: int, name: str, role: str) -> bool:
         ws = get_or_create_users_sheet()
         tz = pytz.timezone(TIMEZONE)
         now = datetime.now(tz).strftime("%d.%m.%Y %H:%M")
+        rows = ws.get_all_values()
+        for i, row in enumerate(rows[1:], start=2):
+            if row and str(row[0]) == str(telegram_id):
+                ws.update(f"A{i}:D{i}", [[str(telegram_id), name, role, now]])
+                logger.info(f"Updated user {telegram_id} -> {name}")
+                return True
         ws.append_row([str(telegram_id), name, role, now])
+        logger.info(f"Registered user {telegram_id} -> {name}")
         return True
     except Exception as e:
         logger.error("Error register_user: " + str(e))
