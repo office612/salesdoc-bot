@@ -74,19 +74,8 @@ def add_payment(data: dict) -> int:
         ws = get_sheet_by_month(int(month))
     else:
         ws = get_current_sheet()
-
     tz = pytz.timezone(TIMEZONE)
     today = datetime.now(tz).strftime("%d.%m.%Y")
-
-    all_vals = ws.get_all_values()
-    next_row = DATA_START_ROW
-    for i in range(len(all_vals) - 1, DATA_START_ROW - 2, -1):
-        if any(cell.strip() for cell in all_vals[i]):
-            next_row = i + 2
-            break
-
-    j_formula = f'=ЕСЛИ(ИЛИ(E{next_row}="";H{next_row}="";I{next_row}="");"";E{next_row}*H{next_row}*I{next_row})'
-
     row = [
         today,
         data.get("company", ""),
@@ -96,21 +85,20 @@ def add_payment(data: dict) -> int:
         data.get("manager", ""),
         data.get("tariff", ""),
         float(data.get("price", 0) or 0),
-        f'=ЕСЛИ(G{next_row}="";"";ЕСЛИ(G{next_row}="Месячный";1;ЕСЛИ(G{next_row}="3 месячный";3;ЕСЛИ(G{next_row}="6 месячный";6;ЕСЛИ(G{next_row}="12 месяцев";12;1)))))',
-        j_formula,
+        "",
+        "",
         data.get("bank", ""),
         "Нет",
     ]
-
     fact = data.get("fact_amount", "")
     if fact not in ("", None):
         row.append(fact)
-
     ws.append_row(row, value_input_option="USER_ENTERED")
+    next_row = len(ws.col_values(1))
+    ws.update_cell(next_row, 9,  f'=ЕСЛИ(G{next_row}="";"";ЕСЛИ(G{next_row}="Месячный";1;ЕСЛИ(G{next_row}="3 месячный";3;ЕСЛИ(G{next_row}="6 месячный";6;ЕСЛИ(G{next_row}="12 месяцев";12;1)))))')
+    ws.update_cell(next_row, 10, f'=ЕСЛИ(ИЛИ(E{next_row}="";H{next_row}="";I{next_row}="");"";E{next_row}*H{next_row}*I{next_row})')
     logger.info("Added row=" + str(next_row) + " month=" + str(month))
     return next_row
-
-
 def confirm_payment(row_num: int, month: int) -> bool:
     try:
         ws = get_sheet_by_month(month)
@@ -202,4 +190,5 @@ def register_user(telegram_id: int, name: str, role: str) -> bool:
     except Exception as e:
         logger.error("Error register_user: " + str(e))
         return False
+
 
