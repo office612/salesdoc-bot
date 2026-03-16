@@ -20,20 +20,20 @@ def format_summary(data: dict) -> str:
     month_num = data.get('month')
     month_name = MONTH_SHEETS.get(int(month_num), '?') if month_num else 'текущий'
     fact = data.get('fact_amount', '')
-    fact_str = f"\nU0001f4b5 Сумма факт: <b>{fact}</b>" if fact else ''
+    fact_str = f'\n💵 Сумма факт: <b>{fact}</b>' if fact else ''
     return (
-        f"U0001f4cb <b>Проверка:</b>\n\n"
-        f"U0001f4c5 Месяц: <b>{month_name}</b>\n"
-        f"U0001f4e6 Статья: <b>{data.get('category', '—')}</b>\n"
-        f"U0001f4c4 Лицензия: <b>{data.get('license_type', '—')}</b>\n"
-        f"U0001f3e2 Клиент: <b>{data.get('client', '—')}</b>\n"
-        f"U0001f522 Кол-во: <b>{data.get('qty', '—')}</b>\n"
-        f"⏱ Тариф: <b>{data.get('period', '—')}</b>\n"
-        f"U0001f4b5 Цена: <b>{data.get('price', '—')}</b>\n"
-        f"U0001f4b0 Сумма: <b>{data.get('amount', '—')}</b>\n"
-        f"U0001f3e6 Банк: <b>{data.get('bank', '—')}</b>\n"
-        f"U0001f464 Менеджер: <b>{data.get('manager', '—')}</b>"
-        f"{fact_str}"
+        f'📋 <b>Проверка:</b>\n\n'
+        f'📅 Месяц: <b>{month_name}</b>\n'
+        f'📦 Статья: <b>{data.get("category", "—")}</b>\n'
+        f'📄 Лицензия: <b>{data.get("license_type", "—")}</b>\n'
+        f'🏢 Клиент: <b>{data.get("client", "—")}</b>\n'
+        f'🔢 Кол-во: <b>{data.get("qty", "—")}</b>\n'
+        f'⏱ Тариф: <b>{data.get("period", "—")}</b>\n'
+        f'💵 Цена: <b>{data.get("price", "—")}</b>\n'
+        f'💰 Сумма: <b>{data.get("amount", "—")}</b>\n'
+        f'🏦 Банк: <b>{data.get("bank", "—")}</b>\n'
+        f'👤 Менеджер: <b>{data.get("manager", "—")}</b>'
+        f'{fact_str}'
     )
 
 
@@ -41,34 +41,34 @@ async def notify_all(bot, data: dict, row_num: int):
     month_num = data.get('month')
     month_name = MONTH_SHEETS.get(int(month_num), '?') if month_num else 'текущий'
     fact = data.get('fact_amount', '')
-    fact_str = f"\nU0001f4b5 Факт: <b>{fact}</b>" if fact else ''
+    fact_str = f'\n💵 Факт: <b>{fact}</b>' if fact else ''
     text = (
-        f"U0001f4b0 <b>Новая оплата!</b>\n\n"
-        f"U0001f4c5 Месяц: <b>{month_name}</b>\n"
-        f"U0001f3e2 <b>{data.get('client', '—')}</b>\n"
-        f"U0001f4b0 {data.get('amount', '—')} тг — {data.get('bank', '—')}\n"
-        f"U0001f4e6 {data.get('category', '—')} | {data.get('license_type', '—')}\n"
-        f"U0001f464 {data.get('manager', '—')}"
-        f"{fact_str}\n"
-        f"U0001f4ca Строка {row_num}"
+        f'💰 <b>Новая оплата!</b>\n\n'
+        f'📅 Месяц: <b>{month_name}</b>\n'
+        f'🏢 <b>{data.get("client", "—")}</b>\n'
+        f'💰 {data.get("amount", "—")} тг — {data.get("bank", "—")}\n'
+        f'📦 {data.get("category", "—")} | {data.get("license_type", "—")}\n'
+        f'👤 {data.get("manager", "—")}'
+        f'{fact_str}\n'
+        f'📊 Строка {row_num}'
     )
     ids = [DIRECTOR_ID] + list(ACCOUNTANT_IDS)
     for uid in ids:
         try:
             await bot.send_message(uid, text)
         except Exception as e:
-            logger.warning(f"notify {uid}: {e}")
+            logger.warning(f'notify {uid}: {e}')
 
 
-@router.message(F.text == 'U0001f4b3 Внести оплату')
+@router.message(F.text == '💳 Внести оплату')
 async def start_payment(message: Message, state: FSMContext):
     await state.clear()
     user = get_user_info(message.from_user.id)
     if not user:
-        await message.answer('Не авторизован. Напиши /start')
+        await message.answer('Не авторизован. /start')
         return
     await state.update_data(manager=user['name'])
-    await message.answer('U0001f4c5 Выберите месяц:', reply_markup=months_kb())
+    await message.answer('📅 Выберите месяц:', reply_markup=months_kb())
     await state.set_state(PaymentStates.choose_month)
 
 
@@ -76,7 +76,7 @@ async def start_payment(message: Message, state: FSMContext):
 async def choose_month(callback: CallbackQuery, state: FSMContext):
     month = int(callback.data.split(':', 1)[1])
     await state.update_data(month=month)
-    await callback.message.edit_text('U0001f4e6 Выберите статью:', reply_markup=categories_kb())
+    await callback.message.edit_text('📦 Статья:', reply_markup=categories_kb())
     await state.set_state(PaymentStates.choose_category)
     await callback.answer()
 
@@ -86,7 +86,7 @@ async def choose_category(callback: CallbackQuery, state: FSMContext):
     cat_id = callback.data.split(':', 1)[1]
     cat_label = next((label for key, label in CATEGORIES if key == cat_id), cat_id)
     await state.update_data(category=cat_label)
-    await callback.message.edit_text('U0001f4c4 Тип лицензии:', reply_markup=license_types_kb())
+    await callback.message.edit_text('📄 Лицензия:', reply_markup=license_types_kb())
     await state.set_state(PaymentStates.choose_license)
     await callback.answer()
 
@@ -95,7 +95,7 @@ async def choose_category(callback: CallbackQuery, state: FSMContext):
 async def choose_license(callback: CallbackQuery, state: FSMContext):
     lt = callback.data.split(':', 1)[1]
     await state.update_data(license_type=lt)
-    await callback.message.edit_text('U0001f3e2 Введите название клиента:')
+    await callback.message.edit_text('🏢 Название клиента:')
     await state.set_state(PaymentStates.enter_client)
     await callback.answer()
 
@@ -103,7 +103,7 @@ async def choose_license(callback: CallbackQuery, state: FSMContext):
 @router.message(PaymentStates.enter_client)
 async def enter_client(message: Message, state: FSMContext):
     await state.update_data(client=message.text.strip())
-    await message.answer('U0001f522 Введите кол-во лицензий:')
+    await message.answer('🔢 Кол-во лицензий:')
     await state.set_state(PaymentStates.enter_qty)
 
 
@@ -123,7 +123,7 @@ async def enter_qty(message: Message, state: FSMContext):
 async def choose_period(callback: CallbackQuery, state: FSMContext):
     period = callback.data.split(':', 1)[1]
     await state.update_data(period=period)
-    await callback.message.edit_text('U0001f4b5 Цена за 1 лицензию:')
+    await callback.message.edit_text('💵 Цена за 1 лицензию:')
     await state.set_state(PaymentStates.enter_price)
     await callback.answer()
 
@@ -136,7 +136,7 @@ async def enter_price(message: Message, state: FSMContext):
         await message.answer('❌ Число, например: 5000')
         return
     await state.update_data(price=price)
-    await message.answer('U0001f4b0 Сумма (озвученная клиенту):')
+    await message.answer('💰 Сумма (озвученная клиенту):')
     await state.set_state(PaymentStates.enter_amount)
 
 
@@ -148,7 +148,7 @@ async def enter_amount(message: Message, state: FSMContext):
         await message.answer('❌ Число, например: 50000')
         return
     await state.update_data(amount=amount)
-    await message.answer('U0001f3e6 Банк:', reply_markup=banks_kb())
+    await message.answer('🏦 Банк:', reply_markup=banks_kb())
     await state.set_state(PaymentStates.choose_bank)
 
 
@@ -157,7 +157,7 @@ async def choose_bank(callback: CallbackQuery, state: FSMContext):
     bank = callback.data.split(':', 1)[1]
     await state.update_data(bank=bank)
     await callback.message.edit_text(
-        'U0001f4b5 Сумма факт (кол. M) — или Пропустить:',
+        '💵 Сумма факт (кол. M) — или Пропустить:',
         reply_markup=skip_kb()
     )
     await state.set_state(PaymentStates.enter_fact)
@@ -209,9 +209,9 @@ async def confirm_payment_handler(callback: CallbackQuery, state: FSMContext):
         month_name = MONTH_SHEETS.get(int(month_num), '?') if month_num else 'текущий'
         await callback.message.edit_text(
             f'✅ <b>Оплата записана!</b>\n\n'
-            f'U0001f4c5 {month_name}\n'
-            f'U0001f3e2 {data.get("client")} — {data.get("amount")} тг\n'
-            f'U0001f4ca Доходы KZ 2026, строка {row_num}'
+            f'📅 {month_name}\n'
+            f'🏢 {data.get("client")} — {data.get("amount")} тг\n'
+            f'📊 Доходы KZ 2026, строка {row_num}'
         )
         await notify_all(callback.bot, data, row_num)
     except Exception as e:
@@ -226,3 +226,4 @@ async def cancel_handler(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.message.edit_text('❌ Отменено.')
     await callback.answer()
+
