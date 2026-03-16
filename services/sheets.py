@@ -94,7 +94,10 @@ def add_payment(data: dict) -> int:
     if fact not in ("", None):
         row.append(fact)
     ws.append_row(row, value_input_option="USER_ENTERED")
-    next_row = len(ws.col_values(1))
+    all_after = ws.get_all_values()
+    next_row = len(all_after)
+    while next_row > DATA_START_ROW and not any(cell.strip() for cell in all_after[next_row - 1]):
+        next_row -= 1
     ws.update_cell(next_row, 9,  f'=ЕСЛИ(G{next_row}="";"";ЕСЛИ(G{next_row}="Месячный";1;ЕСЛИ(G{next_row}="3 месячный";3;ЕСЛИ(G{next_row}="6 месячный";6;ЕСЛИ(G{next_row}="12 месяцев";12;1)))))')
     ws.update_cell(next_row, 10, f'=ЕСЛИ(ИЛИ(E{next_row}="";H{next_row}="";I{next_row}="");"";E{next_row}*H{next_row}*I{next_row})')
     logger.info("Added row=" + str(next_row) + " month=" + str(month))
@@ -190,5 +193,6 @@ def register_user(telegram_id: int, name: str, role: str) -> bool:
     except Exception as e:
         logger.error("Error register_user: " + str(e))
         return False
+
 
 
