@@ -3,7 +3,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 
 def main_menu(role: str) -> ReplyKeyboardMarkup:
     buttons = [
-        [KeyboardButton(text='U0001f4b3 Внести оплату')]
+        [KeyboardButton(text='💳 Внести оплату')]
     ]
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
