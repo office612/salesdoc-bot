@@ -81,7 +81,7 @@ def add_payment(data: dict) -> int:
     col_a = ws.col_values(1)
     next_row = len(col_a) + 1
 
-    j_formula = f'=IF(OR(E{next_row}="",H{next_row}=""),"",E{next_row}*H{next_row})'
+    j_formula = f'=IF(OR(E{next_row}="",H{next_row}="",I{next_row}=""),"",E{next_row}*H{next_row}*I{next_row})'
 
     row = [
         today,
@@ -92,7 +92,7 @@ def add_payment(data: dict) -> int:
         data.get("manager", ""),
         data.get("tariff", ""),
         data.get("price", ""),
-        data.get("period", ""),
+        "",              # I — не записываем, там своя формула таблицы (конвертация тарифа в месяцы)
         j_formula,
         data.get("bank", ""),
         "Нет",
@@ -198,3 +198,4 @@ def register_user(telegram_id: int, name: str, role: str) -> bool:
     except Exception as e:
         logger.error("Error register_user: " + str(e))
         return False
+
