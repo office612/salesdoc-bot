@@ -46,3 +46,15 @@ def skip_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text='⏭ Пропустить', callback_data='skip')],
         [InlineKeyboardButton(text='❌ Отмена', callback_data='cancel')],
     ])
+
+
+def months_kb() -> InlineKeyboardMarkup:
+    months = list(MONTH_SHEETS.items())
+    rows = []
+    for i in range(0, len(months), 3):
+        row = [
+            InlineKeyboardButton(text=m[1], callback_data=f'month:{m[0]}')
+            for m in months[i:i + 3]
+        ]
+        rows.append(row)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
