@@ -81,7 +81,7 @@ def add_payment(data: dict) -> int:
     col_a = ws.col_values(1)
     next_row = len(col_a) + 1
 
-    j_formula = f'=IF(OR(E{next_row}="",H{next_row}="",I{next_row}=""),"",E{next_row}*H{next_row}*I{next_row})'
+    j_formula = f'=ЕСЛИ(ИЛИ(E{next_row}="";H{next_row}="";I{next_row}="");"";E{next_row}*H{next_row}*I{next_row})'
 
     row = [
         today,
@@ -92,7 +92,7 @@ def add_payment(data: dict) -> int:
         data.get("manager", ""),
         data.get("tariff", ""),
         data.get("price", ""),
-        f'=IF(G{next_row}="","",IF(G{next_row}="Месячный",1,IF(G{next_row}="3 месячный",3,IF(G{next_row}="6 месячный",6,IF(G{next_row}="12 месяцев",12,1)))))',
+        f'=ЕСЛИ(G{next_row}="";"";IF(G{next_row}="Месячный";1;IF(G{next_row}="3 месячный";3;IF(G{next_row}="6 месячный";6;IF(G{next_row}="12 месяцев";12;1)))))',
         j_formula,
         data.get("bank", ""),
         "Нет",
