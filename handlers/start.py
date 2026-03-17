@@ -61,10 +61,12 @@ async def cmd_add(message: Message):
         await message.answer("🚫 Нет прав.")
         return
 
-    parts = message.text.strip().split(maxsplit=3)
+    parts = message.text.strip().split()
+    # Формат: /add <id> <роль> <имя из одного или нескольких слов>
+    # Роль — второй аргумент (3-й токен), имя — всё остальное
     if len(parts) < 4:
         await message.answer(
-            "❌ Формат: <code>/add 123456789 Айдос Хапез menedzher</code>\n\n"
+            "❌ Формат: <code>/add 123456789 menedzher Айдос Хапез</code>\n\n"
             "Роли:\n"
             "• <code>menedzher</code> — менеджер\n"
             "• <code>buhgalter</code> — бухгалтер\n"
@@ -72,7 +74,8 @@ async def cmd_add(message: Message):
         )
         return
 
-    _, tg_id_str, name, role = parts
+    _, tg_id_str, role = parts[0], parts[1], parts[2]
+    name = " ".join(parts[3:])
     valid_roles = ("menedzher", "buhgalter", "rukovoditel")
 
     try:
