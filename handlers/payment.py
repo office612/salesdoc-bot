@@ -53,12 +53,10 @@ async def notify_all(bot, data: dict, row_num: int):
         f'{fact_str}\n'
         f'📊 Строка {row_num}'
     )
-    ids = [DIRECTOR_ID] + list(ACCOUNTANT_IDS)
-    for uid in ids:
-        try:
-            await bot.send_message(uid, text)
-        except Exception as e:
-            logger.warning(f'notify {uid}: {e}')
+    try:
+        await bot.send_message(DIRECTOR_ID, text)
+    except Exception as e:
+        logger.warning(f'notify director: {e}')
 
     # Отправка в @kassasdkzbot
     kassa_token = os.getenv("KASSA_BOT_TOKEN", "")
