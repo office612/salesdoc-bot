@@ -1,5 +1,6 @@
 import logging
-from aiogram import Router, F
+import os
+from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 
@@ -58,6 +59,16 @@ async def notify_all(bot, data: dict, row_num: int):
             await bot.send_message(uid, text)
         except Exception as e:
             logger.warning(f'notify {uid}: {e}')
+
+    # Отправка в @kassasdkzbot
+    kassa_token = os.getenv("KASSA_BOT_TOKEN", "")
+    if kassa_token:
+        try:
+            kassa_bot = Bot(token=kassa_token)
+            await kassa_bot.send_message(DIRECTOR_ID, text, parse_mode="HTML")
+            await kassa_bot.session.close()
+        except Exception as e:
+            logger.warning(f'kassa_bot notify failed: {e}')
 
 
 @router.message(F.text == '💳 Внести оплату')
