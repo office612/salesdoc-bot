@@ -1,6 +1,6 @@
 import logging
 from aiogram import Router, F
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import CommandStart, Command
 
 from services.users import get_user_info, fix_legacy_name
@@ -18,15 +18,26 @@ ROLE_LABELS = {
 }
 
 
+def approve_kb(tg_id: int, full_name: str) -> InlineKeyboardMarkup:
+    safe_name = full_name.replace(":", "").replace("|", "")[:40]
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Менеджер", callback_data=f"approve:menedzher:{tg_id}:{safe_name}"),
+            InlineKeyboardButton(text="📊 Бухгалтер", callback_data=f"approve:buhgalter:{tg_id}:{safe_name}"),
+        ],
+        [
+            InlineKeyboardButton(text="❌ Отклонить", callback_data=f"approve:deny:{tg_id}:{safe_name}"),
+        ],
+    ])
+
+
 @router.message(CommandStart())
 async def cmd_start(message: Message):
     user = get_user_info(message.from_user.id)
     if not user:
         await message.answer(
             "🚫 <b>Нет доступа.</b>\n\n"
-            "Обратитесь к руководителю для получения доступа к боту.\n"
-            "Сообщите ему свой Telegram ID: <code>"
-            + str(message.from_user.id) + "</code>"
+            "Руководителю отправлен запрос. Ожидайте одобрения."
         )
         try:
             tg = message.from_user
@@ -34,12 +45,10 @@ async def cmd_start(message: Message):
             await message.bot.send_message(
                 DIRECTOR_ID,
                 f"🔔 <b>Запрос доступа</b>\n\n"
-                f"ID: <code>{tg.id}</code>\n"
-                f"Имя: {tg.full_name}\n"
-                f"Username: {username}\n\n"
-                f"Чтобы добавить:\n"
-                f"<code>/add {tg.id} ИМЯ РОЛЬ</code>\n"
-                f"Роли: menedzher / buhgalter / rukovoditel"
+                f"👤 Имя: <b>{tg.full_name}</b>\n"
+                f"Username: {username}\n"
+                f"🆔 ID: <code>{tg.id}</code>",
+                reply_markup=approve_kb(tg.id, tg.full_name)
             )
         except Exception as e:
             logger.warning(f"notify director failed: {e}")
@@ -55,62 +64,57 @@ async def cmd_start(message: Message):
     )
 
 
-@router.message(Command("add"))
-async def cmd_add(message: Message):
-    if message.from_user.id != DIRECTOR_ID:
-        await message.answer("🚫 Нет прав.")
+@router.callback_query(F.data.startswith("approve:"))
+async def handle_approve(callback: CallbackQuery):
+    if callback.from_user.id != DIRECTOR_ID:
+        await callback.answer("Нет прав.", show_alert=True)
         return
 
-    parts = message.text.strip().split()
-    # Формат: /add <id> <роль> <имя из одного или нескольких слов>
-    # Роль — второй аргумент (3-й токен), имя — всё остальное
+    parts = callback.data.split(":", 3)
     if len(parts) < 4:
-        await message.answer(
-            "❌ Формат: <code>/add 123456789 menedzher Айдос Хапез</code>\n\n"
-            "Роли:\n"
-            "• <code>menedzher</code> — менеджер\n"
-            "• <code>buhgalter</code> — бухгалтер\n"
-            "• <code>rukovoditel</code> — руководитель"
-        )
+        await callback.answer("Ошибка данных.", show_alert=True)
         return
 
-    _, tg_id_str, role = parts[0], parts[1], parts[2]
-    name = " ".join(parts[3:])
-    valid_roles = ("menedzher", "buhgalter", "rukovoditel")
+    _, role, tg_id_str, name = parts
 
     try:
         tg_id = int(tg_id_str)
     except ValueError:
-        await message.answer("❌ Telegram ID должен быть числом.")
+        await callback.answer("Неверный ID.", show_alert=True)
         return
 
-    if role not in valid_roles:
-        await message.answer(
-            f"❌ Неверная роль: <code>{role}</code>\n"
-            f"Допустимые: {', '.join(valid_roles)}"
+    if role == "deny":
+        await callback.message.edit_text(
+            callback.message.text + "\n\n❌ <b>Отклонено</b>"
         )
+        try:
+            await callback.bot.send_message(
+                tg_id,
+                "❌ В доступе отказано.\nОбратитесь к руководителю напрямую."
+            )
+        except Exception:
+            pass
+        await callback.answer("Отклонено.")
         return
 
     try:
         register_user(tg_id, name, role)
         role_label = ROLE_LABELS.get(role, role)
-        await message.answer(
-            f"✅ Пользователь добавлен:\n\n"
-            f"👤 <b>{name}</b>\n"
-            f"🆔 <code>{tg_id}</code>\n"
-            f"🎭 {role_label}"
+        await callback.message.edit_text(
+            callback.message.text + f"\n\n✅ <b>Одобрен как {role_label}</b>"
         )
         try:
-            await message.bot.send_message(
+            await callback.bot.send_message(
                 tg_id,
                 f"✅ <b>Доступ открыт!</b>\n\n"
                 f"Привет, <b>{name}</b>! Теперь ты можешь работать в боте.\n"
                 f"Нажми /start чтобы начать."
             )
         except Exception:
-            await message.answer("⚠️ Пользователь добавлен, но уведомить его не удалось (он ещё не писал боту).")
+            pass
+        await callback.answer(f"✅ Добавлен как {role_label}!")
     except Exception as e:
-        await message.answer(f"❌ Ошибка: {e}")
+        await callback.answer(f"Ошибка: {e}", show_alert=True)
 
 
 @router.message(Command("remove"))
@@ -138,11 +142,11 @@ async def cmd_remove(message: Message):
             if row and str(row[0]) == str(tg_id):
                 name = row[1] if len(row) > 1 else "?"
                 ws.delete_rows(i)
-                await message.answer(f"✅ Пользователь <b>{name}</b> (<code>{tg_id}</code>) удалён.")
+                await message.answer(f"✅ <b>{name}</b> (<code>{tg_id}</code>) удалён.")
                 removed = True
                 break
         if not removed:
-            await message.answer(f"❌ Пользователь с ID <code>{tg_id}</code> не найден.")
+            await message.answer(f"❌ ID <code>{tg_id}</code> не найден.")
     except Exception as e:
         await message.answer(f"❌ Ошибка: {e}")
 
