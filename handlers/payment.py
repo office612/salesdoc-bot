@@ -63,10 +63,16 @@ async def notify_all(bot, data: dict, row_num: int):
         f'👤 {manager}\n'
         f'📊 Строка {row_num}'
     )
-    try:
-        await bot.send_message(DIRECTOR_ID, text, parse_mode='HTML')
-    except Exception as e:
-        logger.warning(f'notify director: {e}')
+    recipients = [DIRECTOR_ID]
+    for acc_id in ACCOUNTANT_IDS:
+        if acc_id and acc_id != DIRECTOR_ID:
+            recipients.append(acc_id)
+
+    for chat_id in recipients:
+        try:
+            await bot.send_message(chat_id, text, parse_mode='HTML')
+        except Exception as e:
+            logger.warning(f'notify {chat_id}: {e}')
 
 @router.message(F.text == '💳 Внести оплату')
 async def start_payment(message: Message, state: FSMContext):
@@ -208,6 +214,7 @@ async def confirm_payment_handler(callback: CallbackQuery, state: FSMContext):
     payment_data = {
         'company':        data.get('client', ''),
         'client':         data.get('client', ''),
+        'category':       data.get('category', ''),
         'category_raw':   data.get('category', ''),
         'category_label': data.get('category_label', ''),
         'license_type':   data.get('license_type', ''),
@@ -235,7 +242,7 @@ async def confirm_payment_handler(callback: CallbackQuery, state: FSMContext):
             f'🏢 {data.get("client")} | {data.get("qty")} × {data.get("price")} тг\n'
             f'📊 Доходы KZ 2026, строка {row_num}'
         )
-        await notify_all(callback.bot, data, row_num)
+        await notify_all(callback.bot, payment_data, row_num)
     except Exception as e:
         logger.error(f'add_payment error: {e}', exc_info=True)
         await callback.message.edit_text(f'❌ Ошибка:\n<code>{e}</code>')
