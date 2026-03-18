@@ -2,7 +2,7 @@ import gspread
 import logging
 import json
 import os
-from datetime import datetime
+from datetime import datetime, date
 import pytz
 from google.oauth2.service_account import Credentials
 from config import SPREADSHEET_ID, MONTH_SHEETS, TIMEZONE
@@ -16,6 +16,7 @@ SCOPES = [
 
 DATA_START_ROW = 7
 
+# Существующие столбцы A-M
 COL_DATE     = 0
 COL_COMPANY  = 1
 COL_ARTICLE  = 2
@@ -30,10 +31,13 @@ COL_BANK     = 10
 COL_SEATED   = 11
 COL_FACT     = 12
 
+# Новые столбцы T-W (с апреля 2026)
 COL_START_PERIOD = 19
 COL_ACT_DATE     = 20
 COL_ACT_PRICE    = 21
 COL_STATUS       = 22
+
+USERS_SHEET = "users"
 
 
 def get_client():
@@ -42,14 +46,24 @@ def get_client():
         creds_dict = json.loads(google_creds_json)
         creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     else:
-        creds = Credentials.from_service_account_file('credentials.json', scopes=SCOPES)
+        creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
     return gspread.authorize(creds)
 
 
-def get_sheet(sheet_name: str):
+def get_spreadsheet():
     gc = get_client()
-    ss = gc.open_by_key(SPREADSHEET_ID)
-    return ss.worksheet(sheet_name)
+    return gc.open_by_key(SPREADSHEET_ID)
+
+
+def get_sheet(sheet_name: str):
+    return get_spreadsheet().worksheet(sheet_name)
+
+
+def get_sheet_by_month(month: int):
+    sheet_name = MONTH_SHEETS.get(month)
+    if not sheet_name:
+        raise ValueError("Unknown month: " + str(month))
+    return get_sheet(sheet_name)
 
 
 def get_next_row(ws) -> int:
@@ -65,91 +79,133 @@ def get_all_values(sheet_name: str) -> list:
         ws = get_sheet(sheet_name)
         return ws.get_all_values()
     except Exception as e:
-        logger.error(f'get_all_values {sheet_name}: {e}')
+        logger.error("get_all_values " + sheet_name + ": " + str(e))
         return []
 
 
+# ── Пользователи ──────────────────────────────────────────────
+def get_user(telegram_id: int) -> dict | None:
+    try:
+        ws = get_sheet(USERS_SHEET)
+        rows = ws.get_all_values()
+        for row in rows[1:]:
+            if row and str(row[0]) == str(telegram_id):
+                return {
+                    "telegram_id": telegram_id,
+                    "name": row[1] if len(row) > 1 else "",
+                    "role": row[2] if len(row) > 2 else "menedzher",
+                    "approved": row[3] if len(row) > 3 else "yes",
+                }
+        return None
+    except Exception as e:
+        logger.error("get_user: " + str(e))
+        return None
+
+
+def register_user(telegram_id: int, name: str, role: str) -> None:
+    try:
+        ws = get_sheet(USERS_SHEET)
+        rows = ws.get_all_values()
+        for i, row in enumerate(rows[1:], start=2):
+            if row and str(row[0]) == str(telegram_id):
+                ws.update(f"A{i}:D{i}", [[str(telegram_id), name, role, "yes"]])
+                return
+        ws.append_row([str(telegram_id), name, role, "yes"])
+    except Exception as e:
+        logger.error("register_user: " + str(e))
+
+
+# ── Оплаты ────────────────────────────────────────────────────
 async def add_payment(data: dict) -> int:
     tz = pytz.timezone(TIMEZONE)
     now = datetime.now(tz)
 
-    month_num = data.get('month')
+    month_num = data.get("month")
     if month_num:
-        sheet_name = MONTH_SHEETS.get(int(month_num), MONTH_SHEETS[now.month])
+        ws = get_sheet_by_month(int(month_num))
     else:
-        sheet_name = MONTH_SHEETS[now.month]
+        ws = get_sheet_by_month(now.month)
 
-    ws = get_sheet(sheet_name)
     n = get_next_row(ws)
 
-    qty    = data.get('qty', 0)
-    price  = data.get('price', 0)
-    amount = data.get('amount', qty * price)
+    qty    = data.get("qty", 0)
+    price  = data.get("price", 0)
+    amount = data.get("amount", qty * price)
 
-    row = [''] * 23
+    row = [""] * 23
 
-    row[COL_DATE]    = now.strftime('%Y-%m-%dT%H:%M:%S.000Z')
-    row[COL_COMPANY] = data.get('client', '')
-    row[COL_ARTICLE] = data.get('category_label', data.get('category', ''))
-    row[COL_LICENSE] = data.get('license_type', '')
+    row[COL_DATE]    = now.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    row[COL_COMPANY] = data.get("client", "")
+    row[COL_ARTICLE] = data.get("category_label", data.get("category", ""))
+    row[COL_LICENSE] = data.get("license_type", "")
     row[COL_QTY]     = qty
-    row[COL_MANAGER] = data.get('manager', '')
-    row[COL_TARIFF]  = data.get('period', '')
+    row[COL_MANAGER] = data.get("manager", "")
+    row[COL_TARIFF]  = data.get("period", "")
     row[COL_PRICE]   = price
-    row[COL_PERIOD]  = _period_to_num(data.get('period', ''))
+    row[COL_PERIOD]  = _period_to_num(data.get("period", ""))
     row[COL_AMOUNT]  = amount
-    row[COL_BANK]    = data.get('bank', '')
-    row[COL_SEATED]  = 'Нет'
-    row[COL_FACT]    = data.get('fact_amount', '')
+    row[COL_BANK]    = data.get("bank", "")
+    row[COL_SEATED]  = "Нет"
+    row[COL_FACT]    = data.get("fact_amount", "")
 
-    start_m = data.get('start_month', '')
+    start_m = data.get("start_month", "")
     if start_m:
-        row[COL_START_PERIOD] = MONTH_SHEETS.get(int(start_m), '')
+        row[COL_START_PERIOD] = MONTH_SHEETS.get(int(start_m), "")
 
-    row[COL_ACT_DATE]  = data.get('activation_date', '')
-    row[COL_ACT_PRICE] = data.get('act_price', '') or ''
+    row[COL_ACT_DATE]  = data.get("activation_date", "")
+    row[COL_ACT_PRICE] = data.get("act_price", "") or ""
 
-    cat = data.get('category', '')
-    if cat in ('nov_vnedrenie', 'nov_integr', 'usluga'):
-        row[COL_STATUS] = 'Не выполнено'
+    cat = data.get("category", "")
+    if cat in ("nov_vnedrenie", "nov_integr", "usluga"):
+        row[COL_STATUS] = "Не выполнено"
 
-    ws.update(f'A{n}:W{n}', [row])
-    logger.info(f'Row {n} in {sheet_name}')
+    ws.update(f"A{n}:W{n}", [row])
+    logger.info(f"Row {n} added")
     return n
 
 
-async def confirm_payment(row_num: int, sheet_name: str, seated: str = 'Да') -> bool:
+def confirm_payment(row_num: int, month: int) -> bool:
     try:
-        ws = get_sheet(sheet_name)
-        ws.update_cell(row_num, COL_SEATED + 1, seated)
+        ws = get_sheet_by_month(month)
+        ws.update_cell(row_num, COL_SEATED + 1, "Да")
         return True
     except Exception as e:
-        logger.error(f'confirm_payment: {e}')
+        logger.error("confirm_payment: " + str(e))
         return False
 
 
-def get_payments_for_period(sheet_name: str, start_row: int = DATA_START_ROW) -> list:
-    try:
-        ws = get_sheet(sheet_name)
-        all_vals = ws.get_all_values()
-        result = []
-        for i in range(start_row - 1, len(all_vals)):
-            row = all_vals[i]
-            if any(row):
-                result.append({'row_num': i + 1, 'data': row})
-        return result
-    except Exception as e:
-        logger.error(f'get_payments_for_period: {e}')
-        return []
+def get_payments_for_period(start_date: date, end_date: date) -> list:
+    payments = []
+    months_needed = set()
+    current = start_date
+    while current <= end_date:
+        months_needed.add(current.month)
+        if current.month == 12:
+            current = current.replace(year=current.year + 1, month=1, day=1)
+        else:
+            current = current.replace(month=current.month + 1, day=1)
+
+    for month in months_needed:
+        try:
+            ws = get_sheet_by_month(month)
+            rows = ws.get_all_values()
+            data_rows = rows[DATA_START_ROW - 1:]
+            for i, row in enumerate(data_rows, start=DATA_START_ROW):
+                if any(row):
+                    payments.append({"row_num": i, "month": month, "data": row})
+        except Exception as e:
+            logger.error("get_payments_for_period month=" + str(month) + ": " + str(e))
+
+    return payments
 
 
 def _period_to_num(period: str) -> int:
     mapping = {
-        '10 дней':    0,
-        '20 дней':    0,
-        'Месячный':   1,
-        '3 месячный': 3,
-        '6 месячный': 6,
-        '12 месяцев': 12,
+        "10 дней":    0,
+        "20 дней":    0,
+        "Месячный":   1,
+        "3 месячный": 3,
+        "6 месячный": 6,
+        "12 месяцев": 12,
     }
     return mapping.get(period, 1)
