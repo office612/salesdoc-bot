@@ -55,35 +55,26 @@ def format_summary(data: dict) -> str:
 async def notify_all(bot, data: dict, row_num: int):
     month_num = data.get('month')
     month_name = MONTH_SHEETS.get(int(month_num), '?') if month_num else 'текущий'
+    cat = data.get('category', '')
+    NEW_CATS = {'new_client', 'nov_vnedrenie', 'nov_integr'}
+    if cat in NEW_CATS:
+        header = 'U0001f195 <b>НОВЫЙ КЛИЕНТ!</b>'
+    else:
+        header = 'U0001f4b3 <b>Новая оплата!</b>'
     text = (
-        f'💳 <b>Новая оплата!</b>\n\n'
-        f'📅 {month_name}\n'
-        f'🏢 {data.get("client")} | {data.get("qty")} x {data.get("price")} тг\n'
-        f'📦 {data.get("category_label", "—")}\n'
-        f'💴 Итого: {data.get("amount")} тг\n'
-        f'👤 {data.get("manager", "—")}\n'
-        f'📊 Строка {row_num}'
+        f'{header}\n\n'
+        f'U0001f4c5 {month_name}\n'
+        f'U0001f3e2 {data.get("client")} | {data.get("qty")} x {data.get("price")} тг\n'
+        f'U0001f4e6 {data.get("category_label", "—")}\n'
+        f'U0001f4b4 Итого: {data.get("amount")} тг\n'
+        f'U0001f464 {data.get("manager", "—")}\n'
+        f'U0001f4ca Строка {row_num}'
     )
     for uid in [DIRECTOR_ID] + ACCOUNTANT_IDS:
         try:
             await bot.send_message(uid, text, parse_mode='HTML')
         except Exception as e:
             logger.warning(f'notify {uid}: {e}')
-
-
-# ══════════════════════════════════════════════
-# STEP 1: Выбор месяца
-# ══════════════════════════════════════════════
-@router.message(F.text == '💳 Внести оплату')
-async def start_payment(message: Message, state: FSMContext):
-    user = get_user_info(message.from_user.id)
-    if not user:
-        await message.answer('❌ Нет доступа')
-        return
-    await state.update_data(manager=user['name'])
-    await message.answer('📅 Выбери месяц:', reply_markup=months_kb())
-    await state.set_state(PaymentStates.choose_month)
-
 
 @router.callback_query(PaymentStates.choose_month, F.data.startswith('month:'))
 async def choose_month(callback: CallbackQuery, state: FSMContext):
