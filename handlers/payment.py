@@ -74,6 +74,18 @@ async def notify_all(bot, data: dict, row_num: int):
         except Exception as e:
             logger.warning(f'notify {chat_id}: {e}')
 
+    # Отправка через @kassasdkzbot
+    kassa_token = os.getenv('KASSA_BOT_TOKEN', '')
+    kassa_chat = os.getenv('ACCOUNTANT_CHAT_ID', '')
+    if kassa_token and kassa_chat:
+        try:
+            kassa_bot = Bot(token=kassa_token)
+            await kassa_bot.send_message(int(kassa_chat), text, parse_mode='HTML')
+            await kassa_bot.session.close()
+            logger.info(f'Kassa notification sent to {kassa_chat}')
+        except Exception as e:
+            logger.warning(f'kassa notify error: {e}')
+
 @router.message(F.text == '💳 Внести оплату')
 async def start_payment(message: Message, state: FSMContext):
     await state.clear()
