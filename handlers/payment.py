@@ -87,11 +87,16 @@ async def choose_month(callback: CallbackQuery, state: FSMContext):
 async def choose_category(callback: CallbackQuery, state: FSMContext):
     cat_id = callback.data.split(':', 1)[1]
     cat_label = next((label for key, label in CATEGORIES if key == cat_id), cat_id)
-    await state.update_data(category=cat_label)
-    await callback.message.edit_text('📄 Лицензия:', reply_markup=license_types_kb())
-    await state.set_state(PaymentStates.choose_license)
+    await state.update_data(category=cat_id, category_label=cat_label)
+    SERVICE_CATS = {'usluga', 'nov_vnedrenie', 'nov_integr', 'nakladnaya', 'oplata_dolga'}
+    if cat_id in SERVICE_CATS:
+        await state.update_data(license_type='Услуга', qty=1)
+        await callback.message.edit_text('🏢 Название клиента:')
+        await state.set_state(PaymentStates.enter_client)
+    else:
+        await callback.message.edit_text('📄 Лицензия:', reply_markup=license_types_kb())
+        await state.set_state(PaymentStates.choose_license)
     await callback.answer()
-
 
 @router.callback_query(PaymentStates.choose_license, F.data.startswith('lt:'))
 async def choose_license(callback: CallbackQuery, state: FSMContext):
