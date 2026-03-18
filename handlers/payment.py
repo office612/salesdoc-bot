@@ -153,9 +153,10 @@ async def choose_period(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(PaymentStates.choose_package, F.data.startswith('pkg:'))
 async def choose_package(callback: CallbackQuery, state: FSMContext):
     price = int(callback.data.split(':', 1)[1])
-    await state.update_data(price=price, amount=price)
-    await callback.message.edit_text('💰 Общая сумма по договору:', reply_markup=skip_kb())
-    await state.set_state(PaymentStates.enter_amount)
+    # Сумма = цена пакета, спрашивать не нужно
+    await state.update_data(price=price, amount=price, fact_amount='')
+    await callback.message.edit_text('🏦 Банк оплаты:', reply_markup=banks_kb())
+    await state.set_state(PaymentStates.choose_bank)
     await callback.answer()
 
 @router.message(PaymentStates.enter_price)
