@@ -92,7 +92,11 @@ def _period_to_num(period: str) -> int:
         return 0
     elif p == "20 дней":
         return 0
-    return 1
+    elif p == "Услуга":
+        return -1
+    elif p == "Баланс":
+        return -1
+    return -1
 
 
 async def add_payment(data: dict) -> int:
@@ -112,7 +116,12 @@ async def add_payment(data: dict) -> int:
     price      = int(data.get("price", 0) or 0)
     period     = data.get("period", data.get("tariff", ""))
     period_num = _period_to_num(period)
-    amount     = qty * price
+    if period_num > 0:
+        amount = int(qty * price * period_num)
+    elif period_num == 0:
+        amount = int(qty * price)
+    else:
+        amount = int(data.get("amount", qty * price))
 
     fact = data.get("fact_amount", "")
     fact_val = int(fact) if fact not in ("", None) else ""
@@ -126,7 +135,7 @@ async def add_payment(data: dict) -> int:
     row[5]  = data.get("manager", "")
     row[6]  = period
     row[7]  = price
-    row[8]  = period_num
+    row[8]  = period_num if period_num > 0 else ""
     row[9]  = amount
     row[10] = data.get("bank", "")
     row[11] = "Нет"
@@ -138,7 +147,7 @@ async def add_payment(data: dict) -> int:
     row[20] = data.get("activation_date", "")
     row[21] = data.get("act_price", "") or ""
 
-    cat = data.get("category", "")
+    cat = data.get("category", data.get("category_raw", ""))
     if cat in ("nov_vnedrenie", "nov_integr", "usluga"):
         row[22] = "Не выполнено"
 
