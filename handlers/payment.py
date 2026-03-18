@@ -51,7 +51,7 @@ async def notify_all(bot, data: dict, row_num: int):
     client  = data.get('client', data.get('company', '—'))
     qty     = data.get('qty', 1)
     price   = data.get('price', 0)
-    amount  = data.get('amount', qty * price)
+    amount  = data.get('amount', 0) or int(float(qty or 0) * float(price or 0))
     cat_lbl = data.get('category_label', data.get('category_raw', '—'))
     manager = data.get('manager', '—')
     text = (
@@ -63,26 +63,18 @@ async def notify_all(bot, data: dict, row_num: int):
         f'👤 {manager}\n'
         f'📊 Строка {row_num}'
     )
-    recipients = [DIRECTOR_ID]
-    for acc_id in ACCOUNTANT_IDS:
-        if acc_id and acc_id != DIRECTOR_ID:
-            recipients.append(acc_id)
-
-    for chat_id in recipients:
-        try:
-            await bot.send_message(chat_id, text, parse_mode='HTML')
-        except Exception as e:
-            logger.warning(f'notify {chat_id}: {e}')
-
-    # Отправка через @kassasdkzbot
+    # Уведомления ТОЛЬКО через @kassasdkzbot
     kassa_token = os.getenv('KASSA_BOT_TOKEN', '')
     kassa_chat = os.getenv('ACCOUNTANT_CHAT_ID', '')
     if kassa_token and kassa_chat:
         try:
             kassa_bot = Bot(token=kassa_token)
+            # Отправляем директору
+            await kassa_bot.send_message(DIRECTOR_ID, text, parse_mode='HTML')
+            # Отправляем в чат бухгалтерии
             await kassa_bot.send_message(int(kassa_chat), text, parse_mode='HTML')
             await kassa_bot.session.close()
-            logger.info(f'Kassa notification sent to {kassa_chat}')
+            logger.info(f'Kassa notifications sent')
         except Exception as e:
             logger.warning(f'kassa notify error: {e}')
 
