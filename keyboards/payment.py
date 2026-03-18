@@ -100,3 +100,12 @@ def act_period_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text='20 дней  4 000 тг/лиц', callback_data='act_period:20:4000')],
         [InlineKeyboardButton(text='Полный месяц  7 000 тг/лиц', callback_data='act_period:30:7000')],
     ])
+
+
+def package_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text='📦 Стандарт — 99 000 тг',   callback_data='pkg:99000')],
+        [InlineKeyboardButton(text='📦 Стандарт+ — 199 000 тг',  callback_data='pkg:199000')],
+        [InlineKeyboardButton(text='⭐ Премиум — 599 000 тг',    callback_data='pkg:599000')],
+        [InlineKeyboardButton(text='❌ Отмена',                   callback_data='cancel')],
+    ])
