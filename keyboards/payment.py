@@ -51,7 +51,7 @@ def banks_kb() -> InlineKeyboardMarkup:
 
 def confirm_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text='Записать', callback_data='confirm'),
+        [InlineKeyboardButton(text='Записать', callback_data='pay_confirm'),
          InlineKeyboardButton(text='Отмена', callback_data='cancel')],
     ])
 
