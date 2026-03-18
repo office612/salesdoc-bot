@@ -48,20 +48,25 @@ async def notify_all(bot, data: dict, row_num: int):
         header = '🆕 <b>НОВЫЙ КЛИЕНТ!</b>'
     else:
         header = '💳 <b>Новая оплата!</b>'
+    client  = data.get('client', data.get('company', '—'))
+    qty     = data.get('qty', 1)
+    price   = data.get('price', 0)
+    amount  = data.get('amount', qty * price)
+    cat_lbl = data.get('category_label', data.get('category_raw', '—'))
+    manager = data.get('manager', '—')
     text = (
         f'{header}\n\n'
         f'📅 {month_name}\n'
-        f'🏢 {data.get("client", data.get("company",""))} | {data.get("qty",1)} x {data.get("price",0)} тг\n'
-        f'📦 {data.get("category_label", "—")}\n'
-        f'💴 Итого: {data.get("amount", 0)} тг\n'
-        f'👤 {data.get("manager", "—")}\n'
+        f'🏢 {client} | {qty} x {price} тг\n'
+        f'📦 {cat_lbl}\n'
+        f'💴 Итого: {amount} тг\n'
+        f'👤 {manager}\n'
         f'📊 Строка {row_num}'
     )
-    for uid in [DIRECTOR_ID] + ACCOUNTANT_IDS:
-        try:
-            await bot.send_message(uid, text, parse_mode='HTML')
-        except Exception as e:
-            logger.warning(f'notify {uid}: {e}')
+    try:
+        await bot.send_message(DIRECTOR_ID, text, parse_mode='HTML')
+    except Exception as e:
+        logger.warning(f'notify director: {e}')
 
 @router.message(F.text == '💳 Внести оплату')
 async def start_payment(message: Message, state: FSMContext):
@@ -91,7 +96,7 @@ async def choose_category(callback: CallbackQuery, state: FSMContext):
     await state.update_data(category=cat_id, category_label=cat_label)
     SERVICE_CATS = {'usluga', 'nov_vnedrenie', 'nov_integr', 'nakladnaya', 'oplata_dolga'}
     if cat_id in SERVICE_CATS:
-        await state.update_data(license_type='Услуга', qty=1)
+        await state.update_data(license_type='Услуга', qty=1, period='Услуга')
         await callback.message.edit_text('🏢 Название клиента:')
         await state.set_state(PaymentStates.enter_client)
     else:
@@ -115,8 +120,8 @@ async def enter_client(message: Message, state: FSMContext):
     cat = data.get('category', '')
     SERVICE_CATS = {'usluga', 'nov_vnedrenie', 'nov_integr', 'nakladnaya', 'oplata_dolga'}
     if cat in SERVICE_CATS:
-        await message.answer('⏱ Тариф:', reply_markup=periods_kb())
-        await state.set_state(PaymentStates.choose_period)
+        await message.answer('📦 Выбери пакет:', reply_markup=package_kb())
+        await state.set_state(PaymentStates.choose_package)
     else:
         await message.answer('🔢 Кол-во лицензий:')
         await state.set_state(PaymentStates.enter_qty)
@@ -137,16 +142,10 @@ async def enter_qty(message: Message, state: FSMContext):
 async def choose_period(callback: CallbackQuery, state: FSMContext):
     period = callback.data.split(':', 1)[1]
     await state.update_data(period=period)
-    data = await state.get_data()
-    cat = data.get('category', '')
-    SERVICE_CATS = {'usluga', 'nov_vnedrenie', 'nov_integr', 'nakladnaya', 'oplata_dolga'}
-    if cat in SERVICE_CATS:
-        await callback.message.edit_text('📦 Выбери пакет:', reply_markup=package_kb())
-        await state.set_state(PaymentStates.choose_package)
-    else:
-        await callback.message.edit_text('💵 Цена за 1 лицензию:')
-        await state.set_state(PaymentStates.enter_price)
+    await callback.message.edit_text('💵 Цена за 1 лицензию:')
+    await state.set_state(PaymentStates.enter_price)
     await callback.answer()
+
 
 @router.callback_query(PaymentStates.choose_package, F.data.startswith('pkg:'))
 async def choose_package(callback: CallbackQuery, state: FSMContext):
@@ -207,16 +206,24 @@ async def skip_fact(callback: CallbackQuery, state: FSMContext):
 async def confirm_payment_handler(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     payment_data = {
-        'company':      data.get('client', ''),
-        'category_raw': data.get('category', ''),
-        'license_type': data.get('license_type', ''),
-        'license_qty':  data.get('qty', 0),
-        'manager':      data.get('manager', ''),
-        'tariff':       data.get('period', ''),
-        'price':        data.get('price', 0),
-        'bank':         data.get('bank', ''),
-        'fact_amount':  data.get('fact_amount', ''),
-        'month':        data.get('month'),
+        'company':        data.get('client', ''),
+        'client':         data.get('client', ''),
+        'category_raw':   data.get('category', ''),
+        'category_label': data.get('category_label', ''),
+        'license_type':   data.get('license_type', ''),
+        'license_qty':    data.get('qty', 0),
+        'qty':            data.get('qty', 0),
+        'manager':        data.get('manager', ''),
+        'tariff':         data.get('period', ''),
+        'period':         data.get('period', ''),
+        'price':          data.get('price', 0),
+        'amount':         data.get('amount', 0),
+        'bank':           data.get('bank', ''),
+        'fact_amount':    data.get('fact_amount', ''),
+        'month':          data.get('month'),
+        'start_month':    data.get('start_month', ''),
+        'activation_date':data.get('activation_date', ''),
+        'act_price':      data.get('act_price', ''),
     }
     try:
         row_num = await add_payment(payment_data)
