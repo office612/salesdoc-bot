@@ -8,14 +8,15 @@ class PaymentStates(StatesGroup):
     enter_client       = State()
     enter_qty          = State()
     choose_period      = State()
-    confirm_price      = State()   # НОВОЕ: подтвердить авто-цену или ввести вручную
+    choose_package     = State()   # пакет для услуг (Стандарт/Плюс/Премиум)
+    confirm_price      = State()
     enter_price        = State()
     enter_amount       = State()
     choose_bank        = State()
     enter_fact         = State()
-    choose_start_month = State()   # НОВОЕ: с какого месяца начинается оплата
-    choose_activation  = State()   # НОВОЕ: активирован? (для нового клиента)
-    choose_act_period  = State()   # НОВОЕ: период активации (10/20/полный)
+    choose_start_month = State()
+    choose_activation  = State()
+    choose_act_period  = State()
     confirm            = State()
 
 
