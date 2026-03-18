@@ -6,6 +6,7 @@ from aiogram.fsm.context import FSMContext
 
 from states import PaymentStates
 from keyboards.payment import (
+    package_kb,
     categories_kb, license_types_kb, periods_kb,
     banks_kb, confirm_kb, skip_kb, months_kb
 )
@@ -137,10 +138,25 @@ async def enter_qty(message: Message, state: FSMContext):
 async def choose_period(callback: CallbackQuery, state: FSMContext):
     period = callback.data.split(':', 1)[1]
     await state.update_data(period=period)
-    await callback.message.edit_text('💵 Цена за 1 лицензию:')
-    await state.set_state(PaymentStates.enter_price)
+    data = await state.get_data()
+    cat = data.get('category', '')
+    SERVICE_CATS = {'usluga', 'nov_vnedrenie', 'nov_integr', 'nakladnaya', 'oplata_dolga'}
+    if cat in SERVICE_CATS:
+        await callback.message.edit_text('📦 Выбери пакет:', reply_markup=package_kb())
+        await state.set_state(PaymentStates.choose_package)
+    else:
+        await callback.message.edit_text('💵 Цена за 1 лицензию:')
+        await state.set_state(PaymentStates.enter_price)
     await callback.answer()
 
+
+@router.callback_query(PaymentStates.choose_package, F.data.startswith('pkg:'))
+async def choose_package(callback: CallbackQuery, state: FSMContext):
+    price = int(callback.data.split(':', 1)[1])
+    await state.update_data(price=price, amount=price)
+    await callback.message.edit_text('💰 Общая сумма по договору:', reply_markup=skip_kb())
+    await state.set_state(PaymentStates.enter_amount)
+    await callback.answer()
 
 @router.message(PaymentStates.enter_price)
 async def enter_price(message: Message, state: FSMContext):
