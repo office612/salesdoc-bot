@@ -111,9 +111,15 @@ async def choose_license(callback: CallbackQuery, state: FSMContext):
 @router.message(PaymentStates.enter_client)
 async def enter_client(message: Message, state: FSMContext):
     await state.update_data(client=message.text.strip())
-    await message.answer('🔢 Кол-во лицензий:')
-    await state.set_state(PaymentStates.enter_qty)
-
+    data = await state.get_data()
+    cat = data.get('category', '')
+    SERVICE_CATS = {'usluga', 'nov_vnedrenie', 'nov_integr', 'nakladnaya', 'oplata_dolga'}
+    if cat in SERVICE_CATS:
+        await message.answer('⏱ Тариф:', reply_markup=periods_kb())
+        await state.set_state(PaymentStates.choose_period)
+    else:
+        await message.answer('🔢 Кол-во лицензий:')
+        await state.set_state(PaymentStates.enter_qty)
 
 @router.message(PaymentStates.enter_qty)
 async def enter_qty(message: Message, state: FSMContext):
