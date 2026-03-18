@@ -2,8 +2,7 @@ import gspread
 import logging
 import json
 import os
-from datetime import datetime, date
-from typing import Optional
+from datetime import datetime
 import pytz
 from google.oauth2.service_account import Credentials
 from config import SPREADSHEET_ID, MONTH_SHEETS, TIMEZONE
@@ -17,29 +16,27 @@ SCOPES = [
 
 DATA_START_ROW = 7
 
-# ── Существующие столбцы A–M (не трогать!) ──────────
-COL_DATE     = 0   # A
-COL_COMPANY  = 1   # B
-COL_ARTICLE  = 2   # C
-COL_LICENSE  = 3   # D
-COL_QTY      = 4   # E
-COL_MANAGER  = 5   # F
-COL_TARIFF   = 6   # G
-COL_PRICE    = 7   # H
-COL_PERIOD   = 8   # I
-COL_AMOUNT   = 9   # J
-COL_BANK     = 10  # K
-COL_SEATED   = 11  # L
-COL_FACT     = 12  # M
+COL_DATE     = 0
+COL_COMPANY  = 1
+COL_ARTICLE  = 2
+COL_LICENSE  = 3
+COL_QTY      = 4
+COL_MANAGER  = 5
+COL_TARIFF   = 6
+COL_PRICE    = 7
+COL_PERIOD   = 8
+COL_AMOUNT   = 9
+COL_BANK     = 10
+COL_SEATED   = 11
+COL_FACT     = 12
 
-# ── Новые столбцы T–W (добавлены с апреля 2026) ──────
-COL_START_PERIOD = 19  # T — с какого месяца начинается оплата
-COL_ACT_DATE     = 20  # U — дата активации нового клиента
-COL_ACT_PRICE    = 21  # V — цена активации за лицензию
-COL_STATUS       = 22  # W — статус услуги (внедрение/интеграция)
+COL_START_PERIOD = 19
+COL_ACT_DATE     = 20
+COL_ACT_PRICE    = 21
+COL_STATUS       = 22
 
 
-def get_client() -> gspread.Client:
+def get_client():
     google_creds_json = os.getenv("GOOGLE_CREDENTIALS")
     if google_creds_json:
         creds_dict = json.loads(google_creds_json)
@@ -53,13 +50,6 @@ def get_sheet(sheet_name: str):
     gc = get_client()
     ss = gc.open_by_key(SPREADSHEET_ID)
     return ss.worksheet(sheet_name)
-
-
-def get_current_sheet():
-    tz = pytz.timezone(TIMEZONE)
-    now = datetime.now(tz)
-    sheet_name = MONTH_SHEETS.get(now.month, 'Янв')
-    return get_sheet(sheet_name)
 
 
 def get_next_row(ws) -> int:
@@ -83,7 +73,6 @@ async def add_payment(data: dict) -> int:
     tz = pytz.timezone(TIMEZONE)
     now = datetime.now(tz)
 
-    # Определяем лист
     month_num = data.get('month')
     if month_num:
         sheet_name = MONTH_SHEETS.get(int(month_num), MONTH_SHEETS[now.month])
@@ -97,10 +86,8 @@ async def add_payment(data: dict) -> int:
     price  = data.get('price', 0)
     amount = data.get('amount', qty * price)
 
-    # Формируем строку из 23 столбцов (A–W)
     row = [''] * 23
 
-    # Существующие столбцы A–M
     row[COL_DATE]    = now.strftime('%Y-%m-%dT%H:%M:%S.000Z')
     row[COL_COMPANY] = data.get('client', '')
     row[COL_ARTICLE] = data.get('category_label', data.get('category', ''))
@@ -115,7 +102,6 @@ async def add_payment(data: dict) -> int:
     row[COL_SEATED]  = 'Нет'
     row[COL_FACT]    = data.get('fact_amount', '')
 
-    # Новые столбцы T–W (только для апрельских и более поздних листов)
     start_m = data.get('start_month', '')
     if start_m:
         row[COL_START_PERIOD] = MONTH_SHEETS.get(int(start_m), '')
@@ -127,10 +113,34 @@ async def add_payment(data: dict) -> int:
     if cat in ('nov_vnedrenie', 'nov_integr', 'usluga'):
         row[COL_STATUS] = 'Не выполнено'
 
-    # Записываем одной операцией
     ws.update(f'A{n}:W{n}', [row])
-    logger.info(f'Записана строка {n} в лист {sheet_name}')
+    logger.info(f'Row {n} in {sheet_name}')
     return n
+
+
+async def confirm_payment(row_num: int, sheet_name: str, seated: str = 'Да') -> bool:
+    try:
+        ws = get_sheet(sheet_name)
+        ws.update_cell(row_num, COL_SEATED + 1, seated)
+        return True
+    except Exception as e:
+        logger.error(f'confirm_payment: {e}')
+        return False
+
+
+def get_payments_for_period(sheet_name: str, start_row: int = DATA_START_ROW) -> list:
+    try:
+        ws = get_sheet(sheet_name)
+        all_vals = ws.get_all_values()
+        result = []
+        for i in range(start_row - 1, len(all_vals)):
+            row = all_vals[i]
+            if any(row):
+                result.append({'row_num': i + 1, 'data': row})
+        return result
+    except Exception as e:
+        logger.error(f'get_payments_for_period: {e}')
+        return []
 
 
 def _period_to_num(period: str) -> int:
