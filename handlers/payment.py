@@ -8,11 +8,12 @@ from states import PaymentStates
 from keyboards.payment import (
     package_kb,
     categories_kb, license_types_kb, periods_kb,
-    banks_kb, confirm_kb, skip_kb, months_kb
+    banks_kb, confirm_kb, skip_kb, months_kb,
+    confirm_price_kb
 )
 from services.sheets import add_payment
 from services.users import get_user_info
-from config import CATEGORIES, DIRECTOR_ID, ACCOUNTANT_IDS, MONTH_SHEETS
+from config import CATEGORIES, DIRECTOR_ID, ACCOUNTANT_IDS, MONTH_SHEETS, PRICES_NEW, PRICES_OLD
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -152,8 +153,21 @@ async def enter_qty(message: Message, state: FSMContext):
 async def choose_period(callback: CallbackQuery, state: FSMContext):
     period = callback.data.split(':', 1)[1]
     await state.update_data(period=period)
-    await callback.message.edit_text('💵 Цена за 1 лицензию:')
-    await state.set_state(PaymentStates.enter_price)
+    data = await state.get_data()
+    qty = int(data.get('qty', 1))
+    cat = data.get('category', '')
+    is_new = cat == 'new_client'
+    prices = PRICES_NEW if is_new else PRICES_OLD
+    price = prices.get(period, 0)
+    if price > 0:
+        await callback.message.edit_text(
+            '💵 Цена за 1 лицензию:',
+            reply_markup=confirm_price_kb(period, qty, is_new)
+        )
+        await state.set_state(PaymentStates.confirm_price)
+    else:
+        await callback.message.edit_text('💵 Цена за 1 лицензию:')
+        await state.set_state(PaymentStates.enter_price)
     await callback.answer()
 
 
@@ -163,6 +177,23 @@ async def choose_package(callback: CallbackQuery, state: FSMContext):
     await state.update_data(price=price, amount=price, fact_amount='')
     await callback.message.edit_text('🏦 Банк оплаты:', reply_markup=banks_kb())
     await state.set_state(PaymentStates.choose_bank)
+    await callback.answer()
+
+
+
+@router.callback_query(PaymentStates.confirm_price, F.data.startswith('price_ok:'))
+async def confirm_price_ok(callback: CallbackQuery, state: FSMContext):
+    price = int(callback.data.split(':', 1)[1])
+    await state.update_data(price=price)
+    await callback.message.edit_text('Банк:', reply_markup=banks_kb())
+    await state.set_state(PaymentStates.choose_bank)
+    await callback.answer()
+
+
+@router.callback_query(PaymentStates.confirm_price, F.data == 'price_manual')
+async def confirm_price_manual(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text('Цена за 1 лицензию:')
+    await state.set_state(PaymentStates.enter_price)
     await callback.answer()
 
 @router.message(PaymentStates.enter_price)
