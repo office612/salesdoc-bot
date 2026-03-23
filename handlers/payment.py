@@ -3,12 +3,11 @@ import os
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
-
 from states import PaymentStates
 from keyboards.payment import (
-    package_kb, categories_kb, license_types_kb,
-    periods_kb, banks_kb, confirm_kb, skip_kb,
-    months_kb, confirm_price_kb, managers_kb, payment_date_kb
+    package_kb, categories_kb, license_types_kb, periods_kb,
+    banks_kb, confirm_kb, skip_kb, months_kb, confirm_price_kb,
+    managers_kb, payment_date_kb, calendar_kb
 )
 from services.sheets import add_payment
 from services.users import get_user_info, is_accountant, is_manager
@@ -76,6 +75,7 @@ async def notify_all(bot, data: dict, row_num: int):
             logger.info(f'Kassa notifications sent')
         except Exception as e:
             logger.warning(f'kassa notify error: {e}')
+
 
 @router.message(F.text == '💳 Внести оплату')
 async def start_payment(message: Message, state: FSMContext):
@@ -161,6 +161,7 @@ async def enter_qty(message: Message, state: FSMContext):
     await message.answer('⏱ Тариф:', reply_markup=periods_kb())
     await state.set_state(PaymentStates.choose_period)
 
+
 @router.callback_query(PaymentStates.choose_period, F.data.startswith('period:'))
 async def choose_period(callback: CallbackQuery, state: FSMContext):
     period = callback.data.split(':', 1)[1]
@@ -245,6 +246,59 @@ async def skip_fact(callback: CallbackQuery, state: FSMContext):
     await state.set_state(PaymentStates.choose_payment_date)
     await callback.answer()
 
+
+# ── Календарь: открыть ──
+@router.callback_query(PaymentStates.choose_payment_date, F.data == 'pdate:cal')
+async def open_calendar(callback: CallbackQuery, state: FSMContext):
+    from datetime import datetime as dt
+    import pytz
+    tz = pytz.timezone('Asia/Almaty')
+    now = dt.now(tz)
+    await callback.message.edit_text(
+        '📅 Выберите дату:',
+        reply_markup=calendar_kb(now.year, now.month)
+    )
+    await callback.answer()
+
+
+# ── Календарь: навигация ◀ ▶ ──
+@router.callback_query(PaymentStates.choose_payment_date, F.data.startswith('pdate:nav:'))
+async def navigate_calendar(callback: CallbackQuery, state: FSMContext):
+    parts = callback.data.split(':')
+    year = int(parts[2])
+    month = int(parts[3])
+    delta = int(parts[4])
+    month += delta
+    if month < 1:
+        month = 12
+        year -= 1
+    elif month > 12:
+        month = 1
+        year += 1
+    await callback.message.edit_reply_markup(
+        reply_markup=calendar_kb(year, month)
+    )
+    await callback.answer()
+
+
+# ── Календарь: выбор дня ──
+@router.callback_query(PaymentStates.choose_payment_date, F.data.startswith('pdate:day:'))
+async def pick_calendar_day(callback: CallbackQuery, state: FSMContext):
+    date_str = callback.data.split(':', 2)[2]
+    await state.update_data(payment_date=date_str)
+    data = await state.get_data()
+    await callback.message.edit_text(format_summary(data), reply_markup=confirm_kb())
+    await state.set_state(PaymentStates.confirm)
+    await callback.answer()
+
+
+# ── Календарь: пустые кнопки (заголовок, дни недели) ──
+@router.callback_query(PaymentStates.choose_payment_date, F.data == 'pdate:noop')
+async def noop_handler(callback: CallbackQuery):
+    await callback.answer()
+
+
+# ── Сегодня / Вчера / Ввести вручную ──
 @router.callback_query(PaymentStates.choose_payment_date, F.data.startswith('pdate:'))
 async def choose_payment_date(callback: CallbackQuery, state: FSMContext):
     val = callback.data.split(':', 1)[1]
