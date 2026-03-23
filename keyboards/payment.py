@@ -1,5 +1,7 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from config import CATEGORIES, LICENSE_TYPES, PERIODS, BANKS, MONTH_SHEETS, PRICES_NEW, PRICES_OLD
+from datetime import datetime, timedelta
+import pytz
+from config import CATEGORIES, LICENSE_TYPES, PERIODS, BANKS, MONTH_SHEETS, PRICES_NEW, PRICES_OLD, TIMEZONE
 
 
 def categories_kb() -> InlineKeyboardMarkup:
@@ -29,13 +31,13 @@ def confirm_price_kb(period: str, qty: int, is_new: bool) -> InlineKeyboardMarku
     prices = PRICES_NEW if is_new else PRICES_OLD
     price = prices.get(period, 0)
     total = price * qty
-    client_type = "\u043d\u043e\u0432\u044b\u0439" if is_new else "\u0441\u0442\u0430\u0440\u044b\u0439"
+    client_type = "новый" if is_new else "старый"
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
-            text=f'OK {price:,} x {qty} = {total:,} \u0442\u0433 ({client_type})',
+            text=f'OK {price:,} x {qty} = {total:,} тг ({client_type})',
             callback_data=f'price_ok:{price}'
         )],
-        [InlineKeyboardButton(text='\u0412\u0432\u0435\u0441\u0442\u0438 \u0446\u0435\u043d\u0443 \u0432\u0440\u0443\u0447\u043d\u0443\u044e', callback_data='price_manual')],
+        [InlineKeyboardButton(text='Ввести цену вручную', callback_data='price_manual')],
     ])
 
 
@@ -50,15 +52,15 @@ def banks_kb() -> InlineKeyboardMarkup:
 
 def confirm_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text='\u0417\u0430\u043f\u0438\u0441\u0430\u0442\u044c', callback_data='pay_confirm'),
-         InlineKeyboardButton(text='\u041e\u0442\u043c\u0435\u043d\u0430', callback_data='cancel')],
+        [InlineKeyboardButton(text='Записать', callback_data='pay_confirm'),
+         InlineKeyboardButton(text='Отмена', callback_data='cancel')],
     ])
 
 
 def skip_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text='\u041f\u0440\u043e\u043f\u0443\u0441\u0442\u0438\u0442\u044c', callback_data='skip')],
-        [InlineKeyboardButton(text='\u041e\u0442\u043c\u0435\u043d\u0430', callback_data='cancel')],
+        [InlineKeyboardButton(text='Пропустить', callback_data='skip')],
+        [InlineKeyboardButton(text='Отмена', callback_data='cancel')],
     ])
 
 
@@ -69,7 +71,7 @@ def months_kb() -> InlineKeyboardMarkup:
         row = [InlineKeyboardButton(text=name, callback_data=f'month:{num}')
                for num, name in items[i:i+3]]
         rows.append(row)
-    rows.append([InlineKeyboardButton(text='\u041e\u0442\u043c\u0435\u043d\u0430', callback_data='cancel')])
+    rows.append([InlineKeyboardButton(text='Отмена', callback_data='cancel')])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -85,25 +87,25 @@ def start_month_kb() -> InlineKeyboardMarkup:
 
 def activation_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text='\u0414\u0430, \u0430\u043a\u0442\u0438\u0432\u0438\u0440\u043e\u0432\u0430\u043d', callback_data='activated:yes')],
-        [InlineKeyboardButton(text='\u041d\u0435\u0442, \u0435\u0449\u0451 \u043d\u0435 \u0430\u043a\u0442\u0438\u0432\u0438\u0440\u043e\u0432\u0430\u043d', callback_data='activated:no')],
+        [InlineKeyboardButton(text='Да, активирован', callback_data='activated:yes')],
+        [InlineKeyboardButton(text='Нет, ещё не активирован', callback_data='activated:no')],
     ])
 
 
 def act_period_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text='10 \u0434\u043d\u0435\u0439 3 000 \u0442\u0433/\u043b\u0438\u0446', callback_data='act_period:10:3000')],
-        [InlineKeyboardButton(text='20 \u0434\u043d\u0435\u0439 4 000 \u0442\u0433/\u043b\u0438\u0446', callback_data='act_period:20:4000')],
-        [InlineKeyboardButton(text='\u041f\u043e\u043b\u043d\u044b\u0439 \u043c\u0435\u0441\u044f\u0446 7 000 \u0442\u0433/\u043b\u0438\u0446', callback_data='act_period:30:7000')],
+        [InlineKeyboardButton(text='10 дней 3 000 тг/лиц', callback_data='act_period:10:3000')],
+        [InlineKeyboardButton(text='20 дней 4 000 тг/лиц', callback_data='act_period:20:4000')],
+        [InlineKeyboardButton(text='Полный месяц 7 000 тг/лиц', callback_data='act_period:30:7000')],
     ])
 
 
 def package_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text='\ud83d\udce6 \u0421\u0442\u0430\u043d\u0434\u0430\u0440\u0442 \u2014 99 000 \u0442\u0433', callback_data='pkg:99000')],
-        [InlineKeyboardButton(text='\ud83d\udce6 \u0421\u0442\u0430\u043d\u0434\u0430\u0440\u0442+ \u2014 199 000 \u0442\u0433', callback_data='pkg:199000')],
-        [InlineKeyboardButton(text='\u2b50 \u041f\u0440\u0435\u043c\u0438\u0443\u043c \u2014 599 000 \u0442\u0433', callback_data='pkg:599000')],
-        [InlineKeyboardButton(text='\u274c \u041e\u0442\u043c\u0435\u043d\u0430', callback_data='cancel')],
+        [InlineKeyboardButton(text='📦 Стандарт \u2014 99 000 тг', callback_data='pkg:99000')],
+        [InlineKeyboardButton(text='📦 Стандарт+ \u2014 199 000 тг', callback_data='pkg:199000')],
+        [InlineKeyboardButton(text='\u2b50 Премиум \u2014 599 000 тг', callback_data='pkg:599000')],
+        [InlineKeyboardButton(text='\u274c Отмена', callback_data='cancel')],
     ])
 
 
@@ -115,6 +117,18 @@ def managers_kb() -> InlineKeyboardMarkup:
         row = [InlineKeyboardButton(text=f'\ud83d\udc64 {n}', callback_data=f'mgr:{n}')
                for n in all_mgrs[i:i+2]]
         rows.append(row)
-    rows.append([InlineKeyboardButton(text='\u274c \u041e\u0442\u043c\u0435\u043d\u0430', callback_data='cancel')])
+    rows.append([InlineKeyboardButton(text='\u274c Отмена', callback_data='cancel')])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
+
+def payment_date_kb() -> InlineKeyboardMarkup:
+    tz = pytz.timezone(TIMEZONE)
+    now = datetime.now(tz)
+    today = now.strftime("%d.%m.%Y")
+    yesterday = (now - timedelta(days=1)).strftime("%d.%m.%Y")
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f'\ud83d\udcc5 Сегодня ({today})', callback_data=f'pdate:{today}')],
+        [InlineKeyboardButton(text=f'\ud83d\udcc5 Вчера ({yesterday})', callback_data=f'pdate:{yesterday}')],
+        [InlineKeyboardButton(text='\u270f\ufe0f Ввести дату', callback_data='pdate:manual')],
+        [InlineKeyboardButton(text='\u274c Отмена', callback_data='cancel')],
+    ])
