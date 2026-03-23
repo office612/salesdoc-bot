@@ -108,6 +108,7 @@ async def add_payment(data: dict) -> int:
 
     tz = pytz.timezone(TIMEZONE)
     today = datetime.now(tz).strftime("%d.%m.%Y")
+    payment_date = data.get("payment_date", "").strip() or today
 
     col_a = ws.col_values(1)
     next_row = len(col_a) + 1
@@ -127,7 +128,7 @@ async def add_payment(data: dict) -> int:
     fact_val = int(fact) if fact not in ("", None) else ""
 
     row = [""] * 23
-    row[0]  = today
+    row[0]  = payment_date
     row[1]  = data.get("client", data.get("company", ""))
     row[2]  = data.get("category_label", data.get("category_raw", data.get("category", "")))
     row[3]  = data.get("license_type", data.get("license_type_raw", ""))
