@@ -2,7 +2,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 
 class PaymentStates(StatesGroup):
-    choose_manager     = State()   # бухгалтер выбирает менеджера (ВРЕМЕННО)
+        choose_manager     = State()   # бухгалтер выбирает менеджера (ВРЕМЕННО)
     choose_month       = State()
     choose_category    = State()
     choose_license     = State()
@@ -18,8 +18,10 @@ class PaymentStates(StatesGroup):
     choose_start_month = State()
     choose_activation  = State()
     choose_act_period  = State()
+    choose_payment_date = State()
+    enter_payment_date  = State()
     confirm            = State()
 
 
 class AuthStates(StatesGroup):
-    choosing_name = State()
+        choosing_name = State()
