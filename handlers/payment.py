@@ -8,7 +8,7 @@ from states import PaymentStates
 from keyboards.payment import (
     package_kb, categories_kb, license_types_kb,
     periods_kb, banks_kb, confirm_kb, skip_kb,
-    months_kb, confirm_price_kb, managers_kb
+    months_kb, confirm_price_kb, managers_kb, payment_date_kb
 )
 from services.sheets import add_payment
 from services.users import get_user_info, is_accountant, is_manager
@@ -23,9 +23,11 @@ def format_summary(data: dict) -> str:
     month_name = MONTH_SHEETS.get(int(month_num), '?') if month_num else 'текущий'
     fact = data.get('fact_amount', '')
     fact_str = f'\n💵 Сумма факт: <b>{fact}</b>' if fact else ''
+    pdate = data.get('payment_date', 'сегодня')
     return (
         f'📋 <b>Проверка:</b>\n\n'
         f'📅 Месяц: <b>{month_name}</b>\n'
+        f'📆 Дата оплаты: <b>{pdate}</b>\n'
         f'📦 Статья: <b>{data.get("category", "—")}</b>\n'
         f'📄 Лицензия: <b>{data.get("license_type", "—")}</b>\n'
         f'🏢 Клиент: <b>{data.get("client", "—")}</b>\n'
@@ -232,18 +234,47 @@ async def enter_fact(message: Message, state: FSMContext):
         await message.answer('❌ Число или Пропустить')
         return
     await state.update_data(fact_amount=fact)
-    data = await state.get_data()
-    await message.answer(format_summary(data), reply_markup=confirm_kb())
-    await state.set_state(PaymentStates.confirm)
+    await message.answer('📆 Дата оплаты:', reply_markup=payment_date_kb())
+    await state.set_state(PaymentStates.choose_payment_date)
 
 
 @router.callback_query(PaymentStates.enter_fact, F.data == 'skip')
 async def skip_fact(callback: CallbackQuery, state: FSMContext):
     await state.update_data(fact_amount='')
+    await callback.message.edit_text('📆 Дата оплаты:', reply_markup=payment_date_kb())
+    await state.set_state(PaymentStates.choose_payment_date)
+    await callback.answer()
+
+@router.callback_query(PaymentStates.choose_payment_date, F.data.startswith('pdate:'))
+async def choose_payment_date(callback: CallbackQuery, state: FSMContext):
+    val = callback.data.split(':', 1)[1]
+    if val == 'manual':
+        await callback.message.edit_text('✏️ Введите дату в формате ДД.ММ.ГГГГ (например 15.03.2026):')
+        await state.set_state(PaymentStates.enter_payment_date)
+        await callback.answer()
+        return
+    await state.update_data(payment_date=val)
     data = await state.get_data()
     await callback.message.edit_text(format_summary(data), reply_markup=confirm_kb())
     await state.set_state(PaymentStates.confirm)
     await callback.answer()
+
+
+@router.message(PaymentStates.enter_payment_date)
+async def enter_payment_date_manual(message: Message, state: FSMContext):
+    text = message.text.strip()
+    try:
+        from datetime import datetime
+        parsed = datetime.strptime(text, '%d.%m.%Y')
+        date_str = parsed.strftime('%d.%m.%Y')
+    except ValueError:
+        await message.answer('❌ Неверный формат. Введите ДД.ММ.ГГГГ (например 15.03.2026):')
+        return
+    await state.update_data(payment_date=date_str)
+    data = await state.get_data()
+    await message.answer(format_summary(data), reply_markup=confirm_kb())
+    await state.set_state(PaymentStates.confirm)
+
 
 @router.callback_query(PaymentStates.confirm, F.data == 'pay_confirm')
 async def confirm_payment_handler(callback: CallbackQuery, state: FSMContext):
@@ -268,6 +299,7 @@ async def confirm_payment_handler(callback: CallbackQuery, state: FSMContext):
         'start_month': data.get('start_month', ''),
         'activation_date': data.get('activation_date', ''),
         'act_price': data.get('act_price', ''),
+        'payment_date': data.get('payment_date', ''),
     }
     try:
         row_num = await add_payment(payment_data)
