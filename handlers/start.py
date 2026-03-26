@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 ROLE_LABELS = {
     "menedzher":   "Менеджер",
     "buhgalter":   "Бухгалтер",
+    "operator":    "Оператор",
     "rukovoditel": "Руководитель",
 }
 
@@ -24,8 +25,8 @@ def approve_kb(tg_id: int, full_name: str) -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton(text="✅ Менеджер", callback_data=f"approve:menedzher:{tg_id}:{safe_name}"),
             InlineKeyboardButton(text="📊 Бухгалтер", callback_data=f"approve:buhgalter:{tg_id}:{safe_name}"),
-        ],
         [
+            InlineKeyboardButton(text="🔧 Оператор", callback_data=f"approve:operator:{tg_id}:{safe_name}"),
             InlineKeyboardButton(text="❌ Отклонить", callback_data=f"approve:deny:{tg_id}:{safe_name}"),
         ],
     ])
