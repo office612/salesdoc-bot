@@ -21,7 +21,7 @@ ROLE_LABELS = {
 
 def approve_kb(tg_id: int, full_name: str) -> InlineKeyboardMarkup:
     safe_name = full_name.replace(":", "").replace("|", "")[:40]
-   return InlineKeyboardMarkup(inline_keyboard=[
+    return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="✅ Менеджер", callback_data=f"approve:menedzher:{tg_id}:{safe_name}"),
             InlineKeyboardButton(text="📊 Бухгалтер", callback_data=f"approve:buhgalter:{tg_id}:{safe_name}"),
