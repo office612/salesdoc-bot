@@ -35,17 +35,28 @@ USERNAME_TO_NAME = {
         "samat9827":    "Самат",
 }
 
-# Статья (колонка C)
+# Статья (колонка C) — точно по справочнику таблицы Доходы KZ 2026
 CATEGORIES = [
-        ("abon_plata",    "абон. плата"),
-        ("dop_lic",       "доп. лицензии"),
-        ("oplata_dolga",  "Оплата долга"),
-        ("nakladnaya",    "наклодная"),
-        ("balans",        "баланс"),
-        ("usluga",        "Услуга"),
-        ("new_client",    "новый клиент"),
-        ("nov_vnedrenie", "Нов внедрение"),
-        ("nov_integr",    "Нов интеграция"),
+        ("abon_plata",      "абон. плата"),
+        ("dop_lic",         "доп. лицензии"),
+        ("new_client",      "новый клиент"),
+        ("nov_vnedrenie",   "Нов внедрение"),
+        ("nov_integr",      "Нов интеграция"),
+        ("sta_vnedrenie",   "Ста внедрение"),
+        ("sta_integr",      "Ста интеграция"),
+        ("nakladnaya",      "наклодная"),
+        ("oplata_dolga",    "Оплата долга"),
+        ("balans",          "баланс"),
+        ("dorabotka",       "доработка"),
+        ("telegram_boty",   "телеграм боты"),
+        ("integr_plus",     "интеграция +"),
+        ("dop_obuchenie",   "доп обучение"),
+        ("dvagis",          "2гис"),
+        ("shtrafy",         "Штрафы"),
+        ("bonus",           "Бонус"),
+        ("prochie",         "Прочие доходы"),
+        ("vozvrat",         "Возврат"),
+        ("ne_naznacheno",   "Не назначено"),
 ]
 
 # Лицензии аген/экс/мерч... (колонка D)
@@ -99,3 +110,14 @@ PERIOD_MONTHS = {
 
 # Дата разграничения новых/старых клиентов
 NEW_CLIENT_DATE = "2026-03-01"
+
+# Категории-услуги: без лицензии/кол-ва/тарифа → сразу клиент → пакет/сумма
+SERVICE_CATS = {
+    'nov_vnedrenie', 'nov_integr', 'sta_vnedrenie', 'sta_integr',
+    'nakladnaya', 'oplata_dolga', 'dorabotka', 'telegram_boty',
+    'integr_plus', 'dop_obuchenie', 'dvagis', 'shtrafy', 'bonus',
+    'prochie', 'vozvrat', 'ne_naznacheno',
+}
+
+# Категории для которых ставим "Не выполнено" в столбце W (Статус услуги)
+STATUS_CATS = {'nov_vnedrenie', 'nov_integr', 'sta_vnedrenie', 'sta_integr'}
