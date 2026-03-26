@@ -5,11 +5,22 @@ import pytz
 from config import CATEGORIES, LICENSE_TYPES, PERIODS, BANKS, MONTH_SHEETS, PRICES_NEW, PRICES_OLD, TIMEZONE
 
 
-def categories_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=label, callback_data=f'cat:{key}')]
-        for key, label in CATEGORIES
-    ])
+TOP_CATEGORIES = ['new_client', 'nov_vnedrenie', 'nov_integr', 'abon_plata', 'oplata_dolga', 'balans']
+
+
+def categories_kb(show_all: bool = False) -> InlineKeyboardMarkup:
+    if show_all:
+        buttons = [
+            [InlineKeyboardButton(text=label, callback_data=f'cat:{key}')]
+            for key, label in CATEGORIES
+        ]
+    else:
+        buttons = [
+            [InlineKeyboardButton(text=label, callback_data=f'cat:{key}')]
+            for key, label in CATEGORIES if key in TOP_CATEGORIES
+        ]
+        buttons.append([InlineKeyboardButton(text='Ещё ▼', callback_data='cat:more')])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def license_types_kb() -> InlineKeyboardMarkup:
@@ -29,23 +40,17 @@ def periods_kb() -> InlineKeyboardMarkup:
 
 
 def confirm_price_kb(period: str, qty: int, is_new: bool) -> InlineKeyboardMarkup:
-    price_new = PRICES_NEW.get(period, 0)
-    price_old = PRICES_OLD.get(period, 0)
-    total_new = price_new * qty
-    total_old = price_old * qty
-    buttons = []
-    if price_new > 0:
-        buttons.append([InlineKeyboardButton(
-            text=f'Новый: {price_new:,} x {qty} = {total_new:,} тг',
-            callback_data=f'price_ok:{price_new}'
-        )])
-    if price_old > 0 and price_old != price_new:
-        buttons.append([InlineKeyboardButton(
-            text=f'Старый: {price_old:,} x {qty} = {total_old:,} тг',
-            callback_data=f'price_ok:{price_old}'
-        )])
-    buttons.append([InlineKeyboardButton(text='Ввести цену вручную', callback_data='price_manual')])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+    prices = PRICES_NEW if is_new else PRICES_OLD
+    price = prices.get(period, 0)
+    total = price * qty
+    client_type = "новый" if is_new else "старый"
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text=f'OK {price:,} x {qty} = {total:,} тг ({client_type})',
+            callback_data=f'price_ok:{price}'
+        )],
+        [InlineKeyboardButton(text='Ввести цену вручную', callback_data='price_manual')],
+    ])
 
 
 def banks_kb() -> InlineKeyboardMarkup:
