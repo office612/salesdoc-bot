@@ -6,7 +6,7 @@ from datetime import datetime, date
 from typing import Optional
 import pytz
 from google.oauth2.service_account import Credentials
-from config import SPREADSHEET_ID, MONTH_SHEETS, TIMEZONE
+from config import SPREADSHEET_ID, MONTH_SHEETS, TIMEZONE, STATUS_CATS
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,43 @@ SCOPES = [
 ]
 
 DATA_START_ROW = 7
+
+# ── Кэш справочника (загружается один раз за сессию) ─────────
+_ref_cache = {}  # {"Статьи Доходов": [...], "Менеджеры": [...], "Банки": [...]}
+
+
+def _load_ref_cache():
+    """Загружаем лист Справочник и кэшируем значения для валидации."""
+    if _ref_cache:
+        return
+    try:
+        ss = get_client().open_by_key(SPREADSHEET_ID)
+        ws = ss.worksheet("Справочник")
+        all_vals = ws.get_all_values()
+        if not all_vals:
+            return
+        headers = [h.strip() for h in all_vals[0]]
+        for col_idx, header in enumerate(headers):
+            if header:
+                values = []
+                for row in all_vals[1:]:
+                    if col_idx < len(row) and row[col_idx]:
+                        values.append(row[col_idx])
+                _ref_cache[header] = values
+        logger.info(f"Ref cache loaded: {list(_ref_cache.keys())}")
+    except Exception as e:
+        logger.warning(f"Failed to load ref cache: {e}")
+
+
+def _match_ref_value(value: str, ref_column: str) -> str:
+    """Ищет точное значение из справочника по strip-совпадению."""
+    _load_ref_cache()
+    ref_values = _ref_cache.get(ref_column, [])
+    val_stripped = value.strip()
+    for ref_val in ref_values:
+        if ref_val.strip() == val_stripped:
+            return ref_val
+    return value
 
 COL_DATE     = 0   # A
 COL_COMPANY  = 1   # B
@@ -130,15 +167,19 @@ async def add_payment(data: dict) -> int:
     row = [""] * 23
     row[0]  = payment_date
     row[1]  = data.get("client", data.get("company", ""))
-    row[2]  = data.get("category_label", data.get("category_raw", data.get("category", "")))
+    # C, F, K — матчим со справочником (защита от пробелов в IMPORTRANGE)
+    raw_article = data.get("category_label", data.get("category_raw", data.get("category", "")))
+    row[2]  = _match_ref_value(raw_article, "Статьи Доходов")
     row[3]  = data.get("license_type", data.get("license_type_raw", ""))
     row[4]  = qty
-    row[5]  = data.get("manager", "")
+    raw_manager = data.get("manager", "")
+    row[5]  = _match_ref_value(raw_manager, "Менеджеры")
     row[6]  = period
     row[7]  = price
     row[8]  = period_num if period_num > 0 else ""
     row[9]  = amount
-    row[10] = data.get("bank", "")
+    raw_bank = data.get("bank", "")
+    row[10] = _match_ref_value(raw_bank, "Банки")
     row[11] = "Нет"
     row[12] = fact_val
 
@@ -149,7 +190,7 @@ async def add_payment(data: dict) -> int:
     row[21] = data.get("act_price", "") or ""
 
     cat = data.get("category", data.get("category_raw", ""))
-    if cat in ("nov_vnedrenie", "nov_integr", "usluga"):
+    if cat in STATUS_CATS:
         row[22] = "Не выполнено"
 
     ws.update(f"A{next_row}:W{next_row}", [row], value_input_option="USER_ENTERED")
