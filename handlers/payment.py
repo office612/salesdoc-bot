@@ -111,6 +111,12 @@ async def choose_month(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+@router.callback_query(PaymentStates.choose_category, F.data == 'cat:more')
+async def show_all_categories(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text('📦 Статья:', reply_markup=categories_kb(show_all=True))
+    await callback.answer()
+
+
 @router.callback_query(PaymentStates.choose_category, F.data.startswith('cat:'))
 async def choose_category(callback: CallbackQuery, state: FSMContext):
     cat_id = callback.data.split(':', 1)[1]
