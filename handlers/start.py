@@ -6,7 +6,7 @@ from aiogram.filters import CommandStart, Command
 from services.users import get_user_info, fix_legacy_name
 from services.sheets import get_or_create_users_sheet, register_user
 from keyboards.main import main_menu
-from config import DIRECTOR_ID
+from config import DIRECTOR_ID, USERNAME_TO_NAME
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -19,16 +19,17 @@ ROLE_LABELS = {
 }
 
 
-def approve_kb(tg_id: int, full_name: str) -> InlineKeyboardMarkup:
-    safe_name = full_name.replace(":", "").replace("|", "")[:40]
+def approve_kb(tg_id: int, full_name: str, username: str = "") -> InlineKeyboardMarkup:
+    # Передаём username (без @) в callback_data для маппинга имени
+    safe_id = username.lstrip("@") if username else full_name.replace(":", "").replace("|", "")[:40]
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="✅ Менеджер", callback_data=f"approve:menedzher:{tg_id}:{safe_name}"),
-            InlineKeyboardButton(text="📊 Бухгалтер", callback_data=f"approve:buhgalter:{tg_id}:{safe_name}"),
+            InlineKeyboardButton(text="✅ Менеджер", callback_data=f"approve:menedzher:{tg_id}:{safe_id}"),
+            InlineKeyboardButton(text="📊 Бухгалтер", callback_data=f"approve:buhgalter:{tg_id}:{safe_id}"),
         ],
         [
-            InlineKeyboardButton(text="🔧 Оператор", callback_data=f"approve:operator:{tg_id}:{safe_name}"),
-            InlineKeyboardButton(text="❌ Отклонить", callback_data=f"approve:deny:{tg_id}:{safe_name}"),
+            InlineKeyboardButton(text="🔧 Оператор", callback_data=f"approve:operator:{tg_id}:{safe_id}"),
+            InlineKeyboardButton(text="❌ Отклонить", callback_data=f"approve:deny:{tg_id}:{safe_id}"),
         ],
     ])
 
@@ -50,7 +51,7 @@ async def cmd_start(message: Message):
                 f"👤 Имя: <b>{tg.full_name}</b>\n"
                 f"Username: {username}\n"
                 f"🆔 ID: <code>{tg.id}</code>",
-                reply_markup=approve_kb(tg.id, tg.full_name)
+                reply_markup=approve_kb(tg.id, tg.full_name, tg.username or "")
             )
         except Exception as e:
             logger.warning(f"notify director failed: {e}")
@@ -77,13 +78,16 @@ async def handle_approve(callback: CallbackQuery):
         await callback.answer("Ошибка данных.", show_alert=True)
         return
 
-    _, role, tg_id_str, name = parts
+    _, role, tg_id_str, name_or_username = parts
 
     try:
         tg_id = int(tg_id_str)
     except ValueError:
         await callback.answer("Неверный ID.", show_alert=True)
         return
+
+    # Подставляем имя из маппинга по username, иначе используем как есть
+    name = USERNAME_TO_NAME.get(name_or_username, name_or_username)
 
     if role == "deny":
         await callback.message.edit_text(
