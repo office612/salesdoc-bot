@@ -28,6 +28,13 @@ EMPLOYEES = {
         "accountants": ["Гульшан", "Аурика"],
 }
 
+# Маппинг Telegram username → имя из раскрывающегося списка таблицы
+USERNAME_TO_NAME = {
+        "sdsolutionkz": "Айдос",
+        "sdkzhst":      "Акбар",
+        "samat9827":    "Самат",
+}
+
 # Статья (колонка C)
 CATEGORIES = [
         ("abon_plata",    "абон. плата"),
