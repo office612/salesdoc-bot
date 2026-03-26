@@ -11,7 +11,7 @@ from keyboards.payment import (
 )
 from services.sheets import add_payment
 from services.users import get_user_info, is_accountant, is_manager
-from config import CATEGORIES, DIRECTOR_ID, ACCOUNTANT_IDS, MONTH_SHEETS, PRICES_NEW, PRICES_OLD
+from config import CATEGORIES, DIRECTOR_ID, ACCOUNTANT_IDS, MONTH_SHEETS, PRICES_NEW, PRICES_OLD, SERVICE_CATS
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -116,7 +116,6 @@ async def choose_category(callback: CallbackQuery, state: FSMContext):
     cat_id = callback.data.split(':', 1)[1]
     cat_label = next((label for key, label in CATEGORIES if key == cat_id), cat_id)
     await state.update_data(category=cat_id, category_label=cat_label)
-    SERVICE_CATS = {'usluga', 'nov_vnedrenie', 'nov_integr', 'nakladnaya', 'oplata_dolga'}
     if cat_id in SERVICE_CATS:
         await state.update_data(license_type='Услуга', qty=1, period='Услуга')
         await callback.message.edit_text('🏢 Название клиента:')
@@ -141,7 +140,6 @@ async def enter_client(message: Message, state: FSMContext):
     await state.update_data(client=message.text.strip())
     data = await state.get_data()
     cat = data.get('category', '')
-    SERVICE_CATS = {'usluga', 'nov_vnedrenie', 'nov_integr', 'nakladnaya', 'oplata_dolga'}
     if cat in SERVICE_CATS:
         await message.answer('📦 Выбери пакет:', reply_markup=package_kb())
         await state.set_state(PaymentStates.choose_package)
