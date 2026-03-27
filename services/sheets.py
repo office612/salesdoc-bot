@@ -184,14 +184,21 @@ async def add_payment(data: dict) -> int:
     row[9] = amount
     raw_bank = data.get("bank", "")
     row[10] = _match_ref_value(raw_bank, "Банки")
+>>>>>>> ef3c9b3f387095615300fa7e312041ca63bebab8
     row[11] = "Нет"
     row[12] = fact_val
     start_m = data.get("start_month", "")
     row[19] = MONTH_SHEETS.get(int(start_m), "") if start_m else ""
     row[20] = data.get("activation_date", "")
     row[21] = data.get("act_price", "") or ""
+<<<<<<< HEAD
+
+    row[8]  = period_num if cat = data.get("category", data.get("category_raw", ""))> 0 else ""
+    if cat in ("nov_vnedrenie", "nov_integr", "usluga"):
+=======
     cat = data.get("category", data.get("category_raw", ""))
     if cat in STATUS_CATS:
+>>>>>>> ef3c9b3f387095615300fa7e312041ca63bebab8
         row[22] = "Не выполнено"
 
     ws.update(f"A{next_row}:W{next_row}", [row], value_input_option="USER_ENTERED")

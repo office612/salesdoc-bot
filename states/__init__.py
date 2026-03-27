@@ -16,12 +16,10 @@ class PaymentStates(StatesGroup):
     choose_bank = State()
     enter_fact = State()
     choose_start_month = State()
-    choose_activation = State()
-    choose_act_period = State()
-    choose_payment_date = State()
-    enter_payment_date = State()
-    confirm = State()
-    upload_receipt = State()
+    choose_activation  = State()
+    choose_act_period  = State()
+    confirm            = State()
+    upload_receipt  = State()
 
 
 class AuthStates(StatesGroup):
