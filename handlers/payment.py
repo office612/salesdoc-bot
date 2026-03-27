@@ -435,8 +435,7 @@ async def handle_receipt_photo(message: Message, state: FSMContext):
         )
     except Exception as e:
         logger.error(f'Receipt upload error: {e}', exc_info=True)
-        await message.answer(f'⚠️ Не удалось загрузить скрин: {e}\nОплата уже записана, скрин можно добавить вручную.')
-
+        await message.answer('⚠️ Не удалось загрузить скрин.\nОплата уже записана, скрин можно добавить вручную.')
     await state.clear()
 
 
