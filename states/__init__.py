@@ -10,6 +10,8 @@ class PaymentStates(StatesGroup):
     enter_qty = State()
     choose_period = State()
     choose_package = State()
+    choose_payment_date = State()
+    enter_payment_date  = State()
     confirm_price = State()
     enter_price = State()
     enter_amount = State()
