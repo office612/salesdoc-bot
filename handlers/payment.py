@@ -398,25 +398,12 @@ async def confirm_payment_handler(callback: CallbackQuery, state: FSMContext):
 async def handle_receipt_photo(message: Message, state: FSMContext):
     data = await state.get_data()
     row_num = data.get('saved_row')
-    month_num = data.get('saved_month')
     client = data.get('client', 'unknown')
 
     try:
-        # Берём фото максимального размера
         photo = message.photo[-1]
-        file = await message.bot.get_file(photo.file_id)
-        file_bytes = await message.bot.download_file(file.file_path)
-        content = file_bytes.read()
 
-        # Имя файла: строка_клиент_дата.jpg
-        from datetime import datetime
-        import pytz
-        tz = pytz.timezone('Asia/Almaty')
-        now = datetime.now(tz)
-        safe_client = client.replace(' ', '_').replace('/', '_')[:30]
-        filename = f"row{row_num}_{safe_client}_{now.strftime('%d%m%Y_%H%M')}.jpg"
-
-       caption = (
+        caption = (
             f'📎 Скрин оплаты\n'
             f'🏢 {client} | {data.get("qty", "")} x {data.get("price", "")} тг\n'
             f'👤 {data.get("who", "")}\n'
@@ -442,68 +429,33 @@ async def handle_receipt_photo(message: Message, state: FSMContext):
                 pass
 
         await message.answer('✅ Скрин оплаты отправлен!')
+
     except Exception as e:
-        logger.error(f'Receipt upload error: {e}', exc_info=True)
-        await message.answer('⚠️ Не удалось загрузить скрин.\nОплата уже записана, скрин можно добавить вручную.')
-    await state.clear()
-
-
-# ── Загрузка скрина оплаты: документ (если отправили как файл) ──
-@router.message(PaymentStates.upload_receipt, F.document)
-async def handle_receipt_document(message: Message, state: FSMContext):
-    data = await state.get_data()
-    row_num = data.get('saved_row')
-    month_num = data.get('saved_month')
-    client = data.get('client', 'unknown')
-
-    try:
-        doc = message.document
-        file = await message.bot.get_file(doc.file_id)
-        file_bytes = await message.bot.download_file(file.file_path)
-        content = file_bytes.read()
-
-        mime = doc.mime_type or 'application/octet-stream'
-        ext = doc.file_name.split('.')[-1] if doc.file_name and '.' in doc.file_name else 'bin'
-
-        from datetime import datetime
-        import pytz
-        tz = pytz.timezone('Asia/Almaty')
-        now = datetime.now(tz)
-        safe_client = client.replace(' ', '_').replace('/', '_')[:30]
-        filename = f"row{row_num}_{safe_client}_{now.strftime('%d%m%Y_%H%M')}.{ext}"
-
-        link = await upload_receipt(
-            file_bytes=content,
-            filename=filename,
-            year=now.year,
-            month=month_num,
-            mime_type=mime,
-        )
-
-        update_receipt_link(row_num, month_num, link)
-
-        await message.answer(
-            f'✅ Файл оплаты сохранён!\n'
-            f'📎 <a href="{link}">Открыть на Drive</a>',
-            disable_web_page_preview=True
-        )
-    except Exception as e:
-        logger.error(f'Receipt doc upload error: {e}', exc_info=True)
-        await message.answer(f'⚠️ Не удалось загрузить файл: {e}\nОплата уже записана.')
+        logger.error(f'Receipt send error: {e}', exc_info=True)
+        await message.answer('⚠️ Не удалось отправить скрин.')
 
     await state.clear()
 
 
-# ── Загрузка скрина: пропустить ──
-@router.callback_query(PaymentStates.upload_receipt, F.data == 'receipt_skip')
+# ── Пропустить скрин ──
+@router.callback_query(PaymentStates.upload_receipt, F.data == 'skip_receipt')
 async def skip_receipt(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text('⏩ Скрин пропущен. Оплата записана.')
+    await callback.message.edit_text('▶️ Скрин пропущен. Оплата записана.')
     await state.clear()
     await callback.answer()
+```
 
+Также вверху файла **удали** строку:
+```
+from services.drive_upload import upload_receipt
+```
 
-@router.callback_query(F.data == 'cancel')
-async def cancel_handler(callback: CallbackQuery, state: FSMContext):
-    await state.clear()
+И замени:
+```
+from services.sheets import add_payment, update_receipt_link
+```
+на:
+```
+from services.sheets import add_payment
     await callback.message.edit_text('❌ Отменено.')
     await callback.answer()
