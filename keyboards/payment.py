@@ -2,8 +2,8 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from datetime import datetime, timedelta
 import calendar
 import pytz
-from config import CATEGORIES, LICENSE_TYPES, PERIODS, BANKS, MONTH_SHEETS, PRICES_NEW, PRICES_OLD, TIMEZONE
 
+from config import CATEGORIES, LICENSE_TYPES, PERIODS, BANKS, MONTH_SHEETS, PRICES_NEW, PRICES_OLD, TIMEZONE
 
 TOP_CATEGORIES = ['new_client', 'nov_vnedrenie', 'nov_integr', 'abon_plata', 'oplata_dolga', 'balans']
 
@@ -33,8 +33,7 @@ def license_types_kb() -> InlineKeyboardMarkup:
 def periods_kb() -> InlineKeyboardMarkup:
     rows = []
     for i in range(0, len(PERIODS), 2):
-        row = [InlineKeyboardButton(text=PERIODS[j], callback_data=f'period:{PERIODS[j]}')
-               for j in range(i, min(i+2, len(PERIODS)))]
+        row = [InlineKeyboardButton(text=PERIODS[j], callback_data=f'period:{PERIODS[j]}') for j in range(i, min(i+2, len(PERIODS)))]
         rows.append(row)
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -44,6 +43,7 @@ def confirm_price_kb(period: str, qty: int, is_new: bool) -> InlineKeyboardMarku
     price_old = PRICES_OLD.get(period, 0)
     total_new = price_new * qty
     total_old = price_old * qty
+
     buttons = []
     if price_new > 0:
         buttons.append([InlineKeyboardButton(
@@ -62,8 +62,7 @@ def confirm_price_kb(period: str, qty: int, is_new: bool) -> InlineKeyboardMarku
 def banks_kb() -> InlineKeyboardMarkup:
     rows = []
     for i in range(0, len(BANKS), 2):
-        row = [InlineKeyboardButton(text=BANKS[j], callback_data=f'bank:{BANKS[j]}')
-               for j in range(i, min(i+2, len(BANKS)))]
+        row = [InlineKeyboardButton(text=BANKS[j], callback_data=f'bank:{BANKS[j]}') for j in range(i, min(i+2, len(BANKS)))]
         rows.append(row)
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -86,8 +85,7 @@ def months_kb() -> InlineKeyboardMarkup:
     rows = []
     items = list(MONTH_SHEETS.items())
     for i in range(0, len(items), 3):
-        row = [InlineKeyboardButton(text=name, callback_data=f'month:{num}')
-               for num, name in items[i:i+3]]
+        row = [InlineKeyboardButton(text=name, callback_data=f'month:{num}') for num, name in items[i:i+3]]
         rows.append(row)
     rows.append([InlineKeyboardButton(text='Отмена', callback_data='cancel')])
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -97,8 +95,7 @@ def start_month_kb() -> InlineKeyboardMarkup:
     rows = []
     items = list(MONTH_SHEETS.items())
     for i in range(0, len(items), 3):
-        row = [InlineKeyboardButton(text=name, callback_data=f'start_month:{num}')
-               for num, name in items[i:i+3]]
+        row = [InlineKeyboardButton(text=name, callback_data=f'start_month:{num}') for num, name in items[i:i+3]]
         rows.append(row)
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -132,8 +129,7 @@ def managers_kb() -> InlineKeyboardMarkup:
     all_mgrs = [LEADER] + [m for m in EMPLOYEES['managers'] if m != LEADER]
     rows = []
     for i in range(0, len(all_mgrs), 2):
-        row = [InlineKeyboardButton(text=n, callback_data=f'mgr:{n}')
-               for n in all_mgrs[i:i+2]]
+        row = [InlineKeyboardButton(text=n, callback_data=f'mgr:{n}') for n in all_mgrs[i:i+2]]
         rows.append(row)
     rows.append([InlineKeyboardButton(text='Отмена', callback_data='cancel')])
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -161,6 +157,7 @@ def calendar_kb(year: int, month: int) -> InlineKeyboardMarkup:
     tz = pytz.timezone(TIMEZONE)
     now = datetime.now(tz)
     today_d = now.day if now.year == year and now.month == month else -1
+
     rows = []
     rows.append([
         InlineKeyboardButton(text='◀', callback_data=f'pdate:nav:{year}:{month}:-1'),
@@ -168,6 +165,7 @@ def calendar_kb(year: int, month: int) -> InlineKeyboardMarkup:
         InlineKeyboardButton(text='▶', callback_data=f'pdate:nav:{year}:{month}:1'),
     ])
     rows.append([InlineKeyboardButton(text=d, callback_data='pdate:noop') for d in DAYS_RU])
+
     first_weekday, days_in_month = calendar.monthrange(year, month)
     day = 1
     for week in range(6):
@@ -183,5 +181,13 @@ def calendar_kb(year: int, month: int) -> InlineKeyboardMarkup:
         rows.append(row)
         if day > days_in_month:
             break
+
     rows.append([InlineKeyboardButton(text='Отмена', callback_data='cancel')])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def receipt_kb() -> InlineKeyboardMarkup:
+    """Клавиатура для загрузки скрина оплаты."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text='Пропустить', callback_data='receipt_skip')],
+    ])
