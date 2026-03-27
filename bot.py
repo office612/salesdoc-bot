@@ -39,7 +39,7 @@ async def main():
     logger.info("Webhook удалён, старые апдейты очищены")
 
     try:
-        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types(), polling_timeout=30)
     finally:
         await bot.session.close()
 
