@@ -4,8 +4,10 @@ import json
 import os
 from datetime import datetime, date
 from typing import Optional
+
 import pytz
 from google.oauth2.service_account import Credentials
+
 from config import SPREADSHEET_ID, MONTH_SHEETS, TIMEZONE, STATUS_CATS
 
 logger = logging.getLogger(__name__)
@@ -54,24 +56,25 @@ def _match_ref_value(value: str, ref_column: str) -> str:
             return ref_val
     return value
 
-COL_DATE     = 0   # A
-COL_COMPANY  = 1   # B
-COL_ARTICLE  = 2   # C
-COL_LICENSE  = 3   # D
-COL_QTY      = 4   # E
-COL_MANAGER  = 5   # F
-COL_TARIFF   = 6   # G
-COL_PRICE    = 7   # H
-COL_PERIOD   = 8   # I
-COL_AMOUNT   = 9   # J
-COL_BANK     = 10  # K
-COL_SEATED   = 11  # L
-COL_FACT     = 12  # M
 
+COL_DATE = 0       # A
+COL_COMPANY = 1    # B
+COL_ARTICLE = 2    # C
+COL_LICENSE = 3    # D
+COL_QTY = 4        # E
+COL_MANAGER = 5    # F
+COL_TARIFF = 6     # G
+COL_PRICE = 7      # H
+COL_PERIOD = 8     # I
+COL_AMOUNT = 9     # J
+COL_BANK = 10      # K
+COL_SEATED = 11    # L
+COL_FACT = 12      # M
+COL_LINK = 15      # P  (ссылка на скрин оплаты)
 COL_START_PERIOD = 19  # T
-COL_ACT_DATE     = 20  # U
-COL_ACT_PRICE    = 21  # V
-COL_STATUS       = 22  # W
+COL_ACT_DATE = 20  # U
+COL_ACT_PRICE = 21 # V
+COL_STATUS = 22    # W
 
 
 def get_client() -> gspread.Client:
@@ -150,9 +153,9 @@ async def add_payment(data: dict) -> int:
     col_a = ws.col_values(1)
     next_row = len(col_a) + 1
 
-    qty        = int(data.get("qty", data.get("license_qty", 0)) or 0)
-    price      = int(data.get("price", 0) or 0)
-    period     = data.get("period", data.get("tariff", ""))
+    qty = int(data.get("qty", data.get("license_qty", 0)) or 0)
+    price = int(data.get("price", 0) or 0)
+    period = data.get("period", data.get("tariff", ""))
     period_num = _period_to_num(period)
     if period_num > 0:
         amount = int(qty * price * period_num)
@@ -165,30 +168,28 @@ async def add_payment(data: dict) -> int:
     fact_val = int(fact) if fact not in ("", None) else ""
 
     row = [""] * 23
-    row[0]  = payment_date
-    row[1]  = data.get("client", data.get("company", ""))
+    row[0] = payment_date
+    row[1] = data.get("client", data.get("company", ""))
+
     # C, F, K — матчим со справочником (защита от пробелов в IMPORTRANGE)
     raw_article = data.get("category_label", data.get("category_raw", data.get("category", "")))
-    row[2]  = _match_ref_value(raw_article, "Статьи Доходов")
-    row[3]  = data.get("license_type", data.get("license_type_raw", ""))
-    row[4]  = qty
+    row[2] = _match_ref_value(raw_article, "Статьи Доходов")
+    row[3] = data.get("license_type", data.get("license_type_raw", ""))
+    row[4] = qty
     raw_manager = data.get("manager", "")
-    row[5]  = _match_ref_value(raw_manager, "Менеджеры")
-    row[6]  = period
-    row[7]  = price
-    row[8]  = period_num if period_num > 0 else ""
-    row[9]  = amount
+    row[5] = _match_ref_value(raw_manager, "Менеджеры")
+    row[6] = period
+    row[7] = price
+    row[8] = period_num if period_num > 0 else ""
+    row[9] = amount
     raw_bank = data.get("bank", "")
     row[10] = _match_ref_value(raw_bank, "Банки")
     row[11] = "Нет"
     row[12] = fact_val
-
     start_m = data.get("start_month", "")
     row[19] = MONTH_SHEETS.get(int(start_m), "") if start_m else ""
-
     row[20] = data.get("activation_date", "")
     row[21] = data.get("act_price", "") or ""
-
     cat = data.get("category", data.get("category_raw", ""))
     if cat in STATUS_CATS:
         row[22] = "Не выполнено"
@@ -196,6 +197,18 @@ async def add_payment(data: dict) -> int:
     ws.update(f"A{next_row}:W{next_row}", [row], value_input_option="USER_ENTERED")
     logger.info("Added row=" + str(next_row))
     return next_row
+
+
+def update_receipt_link(row_num: int, month: int, link: str) -> bool:
+    """Записывает ссылку на скрин оплаты в столбец P."""
+    try:
+        ws = get_sheet_by_month(month)
+        ws.update_cell(row_num, COL_LINK + 1, link)
+        logger.info(f"Receipt link set: row={row_num}, link={link}")
+        return True
+    except Exception as e:
+        logger.error(f"update_receipt_link error: {e}")
+        return False
 
 
 def confirm_payment(row_num: int, month: int) -> bool:
@@ -231,24 +244,24 @@ def get_payments_for_period(start_date: date, end_date: date) -> list:
                     row_date = datetime.strptime(row[COL_DATE].strip(), "%d.%m.%Y").date()
                 except ValueError:
                     continue
+
                 if start_date <= row_date <= end_date:
-                    fact_val   = row[COL_FACT].strip()   if len(row) > COL_FACT   else ""
-                    j_val      = row[COL_AMOUNT].strip() if len(row) > COL_AMOUNT else ""
-                    amount     = _parse_amount(fact_val if fact_val else j_val)
+                    fact_val = row[COL_FACT].strip() if len(row) > COL_FACT else ""
+                    j_val = row[COL_AMOUNT].strip() if len(row) > COL_AMOUNT else ""
+                    amount = _parse_amount(fact_val if fact_val else j_val)
                     seated_val = row[COL_SEATED].strip() if len(row) > COL_SEATED else "Нет"
                     payments.append({
-                        "row_num":  i,
-                        "month":    month,
-                        "date":     row_date,
-                        "company":  row[COL_COMPANY]  if len(row) > COL_COMPANY  else "",
-                        "category": row[COL_ARTICLE]  if len(row) > COL_ARTICLE  else "",
-                        "manager":  row[COL_MANAGER]  if len(row) > COL_MANAGER  else "",
-                        "amount":   amount,
-                        "seated":   seated_val,
+                        "row_num": i,
+                        "month": month,
+                        "date": row_date,
+                        "company": row[COL_COMPANY] if len(row) > COL_COMPANY else "",
+                        "category": row[COL_ARTICLE] if len(row) > COL_ARTICLE else "",
+                        "manager": row[COL_MANAGER] if len(row) > COL_MANAGER else "",
+                        "amount": amount,
+                        "seated": seated_val,
                     })
         except Exception as e:
             logger.error("get_payments_for_period month=" + str(month) + ": " + str(e))
-
     return payments
 
 
