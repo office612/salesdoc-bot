@@ -1,16 +1,20 @@
 import logging
 import os
+
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
+
 from states import PaymentStates
 from keyboards.payment import (
-    package_kb, categories_kb, license_types_kb, periods_kb,
-    banks_kb, confirm_kb, skip_kb, months_kb, confirm_price_kb,
-    managers_kb, payment_date_kb, calendar_kb
+    package_kb, categories_kb, license_types_kb,
+    periods_kb, banks_kb, confirm_kb, skip_kb, months_kb,
+    confirm_price_kb, managers_kb, payment_date_kb, calendar_kb,
+    receipt_kb,
 )
-from services.sheets import add_payment
+from services.sheets import add_payment, update_receipt_link
 from services.users import get_user_info, is_accountant, is_manager
+from services.drive_upload import upload_receipt
 from config import CATEGORIES, DIRECTOR_ID, ACCOUNTANT_IDS, MONTH_SHEETS, PRICES_NEW, PRICES_OLD, SERVICE_CATS
 
 logger = logging.getLogger(__name__)
@@ -49,12 +53,14 @@ async def notify_all(bot, data: dict, row_num: int):
         header = '🆕 <b>НОВЫЙ КЛИЕНТ!</b>'
     else:
         header = '💳 <b>Новая оплата!</b>'
+
     client = data.get('client', data.get('company', '—'))
     qty = data.get('qty', 1)
     price = data.get('price', 0)
     amount = data.get('amount', 0) or int(float(qty or 0) * float(price or 0))
     cat_lbl = data.get('category_label', data.get('category_raw', '—'))
     manager = data.get('manager', '—')
+
     text = (
         f'{header}\n\n'
         f'📅 {month_name}\n'
@@ -64,6 +70,7 @@ async def notify_all(bot, data: dict, row_num: int):
         f'👤 {manager}\n'
         f'📊 Строка {row_num}'
     )
+
     kassa_token = os.getenv('KASSA_BOT_TOKEN', '')
     kassa_chat = os.getenv('ACCOUNTANT_CHAT_ID', '')
     if kassa_token and kassa_chat:
@@ -370,9 +377,119 @@ async def confirm_payment_handler(callback: CallbackQuery, state: FSMContext):
             f'📊 Доходы KZ 2026, строка {row_num}'
         )
         await notify_all(callback.bot, payment_data, row_num)
+
+        # ── Сохраняем row_num и month для записи ссылки скрина ──
+        await state.update_data(saved_row=row_num, saved_month=int(month_num))
+        await callback.message.answer(
+            '📎 Прикрепите скриншот оплаты (фото)\n'
+            'или нажмите Пропустить:',
+            reply_markup=receipt_kb()
+        )
+        await state.set_state(PaymentStates.upload_receipt)
+
     except Exception as e:
         logger.error(f'add_payment error: {e}', exc_info=True)
         await callback.message.edit_text(f'❌ Ошибка:\n<code>{e}</code>')
+        await state.clear()
+    await callback.answer()
+
+
+# ── Загрузка скрина оплаты: фото ──
+@router.message(PaymentStates.upload_receipt, F.photo)
+async def handle_receipt_photo(message: Message, state: FSMContext):
+    data = await state.get_data()
+    row_num = data.get('saved_row')
+    month_num = data.get('saved_month')
+    client = data.get('client', 'unknown')
+
+    try:
+        # Берём фото максимального размера
+        photo = message.photo[-1]
+        file = await message.bot.get_file(photo.file_id)
+        file_bytes = await message.bot.download_file(file.file_path)
+        content = file_bytes.read()
+
+        # Имя файла: строка_клиент_дата.jpg
+        from datetime import datetime
+        import pytz
+        tz = pytz.timezone('Asia/Almaty')
+        now = datetime.now(tz)
+        safe_client = client.replace(' ', '_').replace('/', '_')[:30]
+        filename = f"row{row_num}_{safe_client}_{now.strftime('%d%m%Y_%H%M')}.jpg"
+
+        # Загружаем на Drive
+        link = await upload_receipt(
+            file_bytes=content,
+            filename=filename,
+            year=now.year,
+            month=month_num,
+        )
+
+        # Записываем ссылку в столбец P
+        update_receipt_link(row_num, month_num, link)
+
+        await message.answer(
+            f'✅ Скрин оплаты сохранён!\n'
+            f'📎 <a href="{link}">Открыть на Drive</a>',
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        logger.error(f'Receipt upload error: {e}', exc_info=True)
+        await message.answer(f'⚠️ Не удалось загрузить скрин: {e}\nОплата уже записана, скрин можно добавить вручную.')
+
+    await state.clear()
+
+
+# ── Загрузка скрина оплаты: документ (если отправили как файл) ──
+@router.message(PaymentStates.upload_receipt, F.document)
+async def handle_receipt_document(message: Message, state: FSMContext):
+    data = await state.get_data()
+    row_num = data.get('saved_row')
+    month_num = data.get('saved_month')
+    client = data.get('client', 'unknown')
+
+    try:
+        doc = message.document
+        file = await message.bot.get_file(doc.file_id)
+        file_bytes = await message.bot.download_file(file.file_path)
+        content = file_bytes.read()
+
+        mime = doc.mime_type or 'application/octet-stream'
+        ext = doc.file_name.split('.')[-1] if doc.file_name and '.' in doc.file_name else 'bin'
+
+        from datetime import datetime
+        import pytz
+        tz = pytz.timezone('Asia/Almaty')
+        now = datetime.now(tz)
+        safe_client = client.replace(' ', '_').replace('/', '_')[:30]
+        filename = f"row{row_num}_{safe_client}_{now.strftime('%d%m%Y_%H%M')}.{ext}"
+
+        link = await upload_receipt(
+            file_bytes=content,
+            filename=filename,
+            year=now.year,
+            month=month_num,
+            mime_type=mime,
+        )
+
+        update_receipt_link(row_num, month_num, link)
+
+        await message.answer(
+            f'✅ Файл оплаты сохранён!\n'
+            f'📎 <a href="{link}">Открыть на Drive</a>',
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        logger.error(f'Receipt doc upload error: {e}', exc_info=True)
+        await message.answer(f'⚠️ Не удалось загрузить файл: {e}\nОплата уже записана.')
+
+    await state.clear()
+
+
+# ── Загрузка скрина: пропустить ──
+@router.callback_query(PaymentStates.upload_receipt, F.data == 'receipt_skip')
+async def skip_receipt(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text('⏩ Скрин пропущен. Оплата записана.')
     await state.clear()
     await callback.answer()
 
