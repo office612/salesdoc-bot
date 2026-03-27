@@ -423,6 +423,8 @@ async def handle_receipt_photo(message: Message, state: FSMContext):
             filename=filename,
             year=now.year,
             month=month_num,
+            bot=message.bot,
+            file_id=photo.file_id,
         )
 
         # Записываем ссылку в столбец P
