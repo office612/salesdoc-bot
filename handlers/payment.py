@@ -430,11 +430,23 @@ async def handle_receipt_photo(message: Message, state: FSMContext):
         # Записываем ссылку в столбец P
         update_receipt_link(row_num, month_num, link)
 
-        await message.answer(
-            f'✅ Скрин оплаты сохранён!\n'
-            f'📎 <a href="{link}">Открыть на Drive</a>',
-            disable_web_page_preview=True
-        )
+        await message.answer('✅ Скрин оплаты сохранён!')
+
+        # Пересылаем фото в @kassasdkzbot
+        from config import KASSA_BOT_CHAT_ID
+        if KASSA_BOT_CHAT_ID:
+            data = await state.get_data()
+            caption = (
+                f'📎 Скрин оплаты\n'
+                f'🏢 {data.get("client", "")}\n'
+                f'💰 {data.get("qty", "")} x {data.get("price", "")} тг\n'
+                f'👤 {data.get("who", "")}'
+            )
+            await message.bot.send_photo(
+                chat_id=KASSA_BOT_CHAT_ID,
+                photo=photo.file_id,
+                caption=caption
+            )
     except Exception as e:
         logger.error(f'Receipt upload error: {e}', exc_info=True)
         await message.answer('⚠️ Не удалось загрузить скрин.\nОплата уже записана, скрин можно добавить вручную.')
