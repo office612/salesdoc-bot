@@ -72,12 +72,12 @@ def _build_notify_caption(data: dict, row_num: int) -> str:
 
 
 def _get_kassa_targets() -> list:
-    """Список chat_id для уведомлений через @kassasdkzbot."""
-    targets = [DIRECTOR_ID]
+    """Chat_id для уведомлений через @kassasdkzbot (группа 'поступление Казахстан')."""
     kassa_chat = os.getenv('ACCOUNTANT_CHAT_ID', '')
     if kassa_chat:
-        targets.append(int(kassa_chat))
-    return targets
+        return [int(kassa_chat)]
+    # Fallback на директора если группа не настроена
+    return [DIRECTOR_ID]
 
 
 async def _get_kassa_bot():
@@ -421,10 +421,7 @@ async def confirm_payment_handler(callback: CallbackQuery, state: FSMContext):
             payment_data_cache=payment_data,
         )
 
-        # Текстовое уведомление через @kassasdkzbot
-        await notify_all(callback.bot, payment_data, row_num)
-
-        # Предлагаем прикрепить скрин
+        # Предлагаем прикрепить скрин (уведомление отправится с фото или при пропуске)
         await callback.message.answer(
             '📎 Прикрепите скриншот оплаты (фото или файл)\n'
             'или нажмите Пропустить:',
@@ -532,9 +529,16 @@ async def handle_receipt_document(message: Message, state: FSMContext):
     await state.clear()
 
 
-# ── Пропустить скрин ──
+# ── Пропустить скрин → отправить уведомление без фото ──
 @router.callback_query(PaymentStates.upload_receipt, F.data == 'skip_receipt')
 async def skip_receipt(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    row_num = data.get('saved_row', '?')
+    payment_data = data.get('payment_data_cache', data)
+
+    # Отправляем текстовое уведомление (без фото)
+    await notify_all(callback.bot, payment_data, row_num)
+
     await callback.message.edit_text('▶️ Скрин пропущен. Оплата записана.')
     await state.clear()
     await callback.answer()
@@ -546,3 +550,4 @@ async def cancel_payment(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.message.edit_text('❌ Отменено.')
     await callback.answer()
+
