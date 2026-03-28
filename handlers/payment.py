@@ -1,20 +1,21 @@
 import logging
 import os
-
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 
 from states import PaymentStates
 from keyboards.payment import (
-    package_kb, categories_kb, license_types_kb,
-    periods_kb, banks_kb, confirm_kb, skip_kb, months_kb,
-    confirm_price_kb, managers_kb, payment_date_kb, calendar_kb,
-    receipt_kb,
+    package_kb, categories_kb, license_types_kb, periods_kb,
+    banks_kb, confirm_kb, skip_kb, months_kb, confirm_price_kb,
+    managers_kb, payment_date_kb, calendar_kb, receipt_kb,
 )
 from services.sheets import add_payment
 from services.users import get_user_info, is_accountant, is_manager
-from config import CATEGORIES, DIRECTOR_ID, ACCOUNTANT_IDS, MONTH_SHEETS, PRICES_NEW, PRICES_OLD, SERVICE_CATS
+from config import (
+    CATEGORIES, DIRECTOR_ID, ACCOUNTANT_IDS, MONTH_SHEETS,
+    PRICES_NEW, PRICES_OLD, SERVICE_CATS,
+)
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -43,15 +44,14 @@ def format_summary(data: dict) -> str:
     )
 
 
-async def notify_all(bot, data: dict, row_num: int):
+def _build_notify_caption(data: dict, row_num: int) -> str:
+    """Формирует текст уведомления."""
     month_num = data.get('month')
     month_name = MONTH_SHEETS.get(int(month_num), '?') if month_num else 'текущий'
+
     cat = data.get('category', '')
     NEW_CATS = {'new_client', 'nov_vnedrenie', 'nov_integr'}
-    if cat in NEW_CATS:
-        header = '🆕 <b>НОВЫЙ КЛИЕНТ!</b>'
-    else:
-        header = '💳 <b>Новая оплата!</b>'
+    header = '🆕 <b>НОВЫЙ КЛИЕНТ!</b>' if cat in NEW_CATS else '💳 <b>Новая оплата!</b>'
 
     client = data.get('client', data.get('company', '—'))
     qty = data.get('qty', 1)
@@ -60,28 +60,56 @@ async def notify_all(bot, data: dict, row_num: int):
     cat_lbl = data.get('category_label', data.get('category_raw', '—'))
     manager = data.get('manager', '—')
 
-    text = (
+    return (
         f'{header}\n\n'
         f'📅 {month_name}\n'
         f'🏢 {client} | {qty} x {price} тг\n'
         f'📦 {cat_lbl}\n'
-        f'💴 Итого: {amount} тг\n'
+        f'💰 Итого: {amount} тг\n'
         f'👤 {manager}\n'
         f'📊 Строка {row_num}'
     )
 
-    kassa_token = os.getenv('KASSA_BOT_TOKEN', '')
-    kassa_chat = os.getenv('ACCOUNTANT_CHAT_ID', '')
-    if kassa_token and kassa_chat:
-        try:
-            kassa_bot = Bot(token=kassa_token)
-            await kassa_bot.send_message(DIRECTOR_ID, text, parse_mode='HTML')
-            await kassa_bot.send_message(int(kassa_chat), text, parse_mode='HTML')
-            await kassa_bot.session.close()
-            logger.info(f'Kassa notifications sent')
-        except Exception as e:
-            logger.warning(f'kassa notify error: {e}')
 
+def _get_kassa_targets() -> list:
+    """Список chat_id для уведомлений через @kassasdkzbot."""
+    targets = [DIRECTOR_ID]
+    kassa_chat = os.getenv('ACCOUNTANT_CHAT_ID', '')
+    if kassa_chat:
+        targets.append(int(kassa_chat))
+    return targets
+
+
+async def _get_kassa_bot():
+    """Создаёт экземпляр @kassasdkzbot."""
+    kassa_token = os.getenv('KASSA_BOT_TOKEN', '')
+    if not kassa_token:
+        return None
+    return Bot(token=kassa_token)
+
+
+async def notify_all(bot: Bot, data: dict, row_num: int):
+    """Текстовое уведомление через @kassasdkzbot."""
+    caption = _build_notify_caption(data, row_num)
+    kassa_bot = await _get_kassa_bot()
+    if not kassa_bot:
+        logger.warning('KASSA_BOT_TOKEN not set')
+        return
+    try:
+        for chat_id in _get_kassa_targets():
+            try:
+                await kassa_bot.send_message(
+                    chat_id=chat_id, text=caption, parse_mode='HTML'
+                )
+            except Exception as e:
+                logger.warning(f'kassa notify to {chat_id}: {e}')
+    finally:
+        await kassa_bot.session.close()
+
+
+# ═══════════════════════════════════════════════════════════════
+#  НАЧАЛО ОПЛАТЫ
+# ═══════════════════════════════════════════════════════════════
 
 @router.message(F.text == '💳 Внести оплату')
 async def start_payment(message: Message, state: FSMContext):
@@ -183,7 +211,10 @@ async def choose_period(callback: CallbackQuery, state: FSMContext):
     prices = PRICES_NEW if is_new else PRICES_OLD
     price = prices.get(period, 0)
     if price > 0:
-        await callback.message.edit_text('💵 Цена за 1 лицензию:', reply_markup=confirm_price_kb(period, qty, is_new))
+        await callback.message.edit_text(
+            '💵 Цена за 1 лицензию:',
+            reply_markup=confirm_price_kb(period, qty, is_new)
+        )
         await state.set_state(PaymentStates.confirm_price)
     else:
         await callback.message.edit_text('💵 Цена за 1 лицензию:')
@@ -232,7 +263,10 @@ async def enter_price(message: Message, state: FSMContext):
 async def choose_bank(callback: CallbackQuery, state: FSMContext):
     bank = callback.data.split(':', 1)[1]
     await state.update_data(bank=bank)
-    await callback.message.edit_text('💵 Сумма факт (кол. M) — или Пропустить:', reply_markup=skip_kb())
+    await callback.message.edit_text(
+        '💵 Сумма факт (кол. M) — или Пропустить:',
+        reply_markup=skip_kb()
+    )
     await state.set_state(PaymentStates.enter_fact)
     await callback.answer()
 
@@ -257,7 +291,8 @@ async def skip_fact(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# ── Календарь: открыть ──
+# ── Календарь ──
+
 @router.callback_query(PaymentStates.choose_payment_date, F.data == 'pdate:cal')
 async def open_calendar(callback: CallbackQuery, state: FSMContext):
     from datetime import datetime as dt
@@ -271,7 +306,6 @@ async def open_calendar(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# ── Календарь: навигация ◀ ▶ ──
 @router.callback_query(PaymentStates.choose_payment_date, F.data.startswith('pdate:nav:'))
 async def navigate_calendar(callback: CallbackQuery, state: FSMContext):
     parts = callback.data.split(':')
@@ -291,7 +325,6 @@ async def navigate_calendar(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# ── Календарь: выбор дня ──
 @router.callback_query(PaymentStates.choose_payment_date, F.data.startswith('pdate:day:'))
 async def pick_calendar_day(callback: CallbackQuery, state: FSMContext):
     date_str = callback.data.split(':', 2)[2]
@@ -302,18 +335,18 @@ async def pick_calendar_day(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# ── Календарь: пустые кнопки (заголовок, дни недели) ──
 @router.callback_query(PaymentStates.choose_payment_date, F.data == 'pdate:noop')
 async def noop_handler(callback: CallbackQuery):
     await callback.answer()
 
 
-# ── Сегодня / Вчера / Ввести вручную ──
 @router.callback_query(PaymentStates.choose_payment_date, F.data.startswith('pdate:'))
 async def choose_payment_date(callback: CallbackQuery, state: FSMContext):
     val = callback.data.split(':', 1)[1]
     if val == 'manual':
-        await callback.message.edit_text('✏️ Введите дату в формате ДД.ММ.ГГГГ (например 15.03.2026):')
+        await callback.message.edit_text(
+            '✏️ Введите дату в формате ДД.ММ.ГГГГ (например 15.03.2026):'
+        )
         await state.set_state(PaymentStates.enter_payment_date)
         await callback.answer()
         return
@@ -339,6 +372,10 @@ async def enter_payment_date_manual(message: Message, state: FSMContext):
     await message.answer(format_summary(data), reply_markup=confirm_kb())
     await state.set_state(PaymentStates.confirm)
 
+
+# ═══════════════════════════════════════════════════════════════
+#  ПОДТВЕРЖДЕНИЕ → ЗАПИСЬ → УВЕДОМЛЕНИЕ
+# ═══════════════════════════════════════════════════════════════
 
 @router.callback_query(PaymentStates.confirm, F.data == 'pay_confirm')
 async def confirm_payment_handler(callback: CallbackQuery, state: FSMContext):
@@ -369,18 +406,27 @@ async def confirm_payment_handler(callback: CallbackQuery, state: FSMContext):
         row_num = await add_payment(payment_data)
         month_num = data.get('month')
         month_name = MONTH_SHEETS.get(int(month_num), '?') if month_num else 'текущий'
+
         await callback.message.edit_text(
             f'✅ <b>Оплата записана!</b>\n\n'
             f'📅 {month_name}\n'
             f'🏢 {data.get("client")} | {data.get("qty")} x {data.get("price")} тг\n'
             f'📊 Доходы KZ 2026, строка {row_num}'
         )
+
+        # Сохраняем данные для отправки фото
+        await state.update_data(
+            saved_row=row_num,
+            saved_month=int(month_num),
+            payment_data_cache=payment_data,
+        )
+
+        # Текстовое уведомление через @kassasdkzbot
         await notify_all(callback.bot, payment_data, row_num)
 
-        # ── Сохраняем row_num и month для записи ссылки скрина ──
-        await state.update_data(saved_row=row_num, saved_month=int(month_num))
+        # Предлагаем прикрепить скрин
         await callback.message.answer(
-            '📎 Прикрепите скриншот оплаты (фото)\n'
+            '📎 Прикрепите скриншот оплаты (фото или файл)\n'
             'или нажмите Пропустить:',
             reply_markup=receipt_kb()
         )
@@ -393,46 +439,95 @@ async def confirm_payment_handler(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# ── Загрузка скрина оплаты: фото ──
+# ═══════════════════════════════════════════════════════════════
+#  СКРИН ОПЛАТЫ — ФОТО → отправляем через @kassasdkzbot
+# ═══════════════════════════════════════════════════════════════
+
 @router.message(PaymentStates.upload_receipt, F.photo)
 async def handle_receipt_photo(message: Message, state: FSMContext):
     data = await state.get_data()
-    row_num = data.get('saved_row')
-    client = data.get('client', 'unknown')
+    row_num = data.get('saved_row', '?')
+    payment_data = data.get('payment_data_cache', data)
+    photo = message.photo[-1]
+    caption = _build_notify_caption(payment_data, row_num)
 
     try:
-        photo = message.photo[-1]
+        # Скачиваем фото через основного бота
+        file_info = await message.bot.get_file(photo.file_id)
+        file_bytes = await message.bot.download_file(file_info.file_path)
 
-        caption = (
-            f'📎 Скрин оплаты\n'
-            f'🏢 {client} | {data.get("qty", "")} x {data.get("price", "")} тг\n'
-            f'👤 {data.get("who", "")}\n'
-            f'📊 Строка {row_num}'
-        )
-
-        # Отправляем директору
-        await message.bot.send_photo(
-            chat_id=DIRECTOR_ID,
-            photo=photo.file_id,
-            caption=caption
-        )
-
-        # Отправляем бухгалтерам
-        for acc_id in ACCOUNTANT_IDS:
+        kassa_bot = await _get_kassa_bot()
+        if kassa_bot:
             try:
-                await message.bot.send_photo(
-                    chat_id=acc_id,
-                    photo=photo.file_id,
-                    caption=caption
+                from aiogram.types import BufferedInputFile
+                input_file = BufferedInputFile(
+                    file_bytes.read(),
+                    filename=f'receipt_{row_num}.jpg'
                 )
-            except Exception:
-                pass
-
-        await message.answer('✅ Скрин оплаты отправлен!')
-
+                for chat_id in _get_kassa_targets():
+                    try:
+                        await kassa_bot.send_photo(
+                            chat_id=chat_id,
+                            photo=input_file,
+                            caption=caption,
+                            parse_mode='HTML'
+                        )
+                    except Exception as e:
+                        logger.warning(f'kassa photo to {chat_id}: {e}')
+            finally:
+                await kassa_bot.session.close()
+            await message.answer('✅ Скрин оплаты отправлен!')
+        else:
+            await message.answer('⚠️ KASSA_BOT_TOKEN не настроен.')
     except Exception as e:
-        logger.error(f'Receipt send error: {e}', exc_info=True)
-        await message.answer('⚠️ Не удалось отправить скрин.')
+        logger.error(f'Receipt photo error: {e}', exc_info=True)
+        await message.answer(f'⚠️ Не удалось отправить скрин: {e}')
+
+    await state.clear()
+
+
+# ═══════════════════════════════════════════════════════════════
+#  СКРИН ОПЛАТЫ — ФАЙЛ/ДОКУМЕНТ → отправляем через @kassasdkzbot
+# ═══════════════════════════════════════════════════════════════
+
+@router.message(PaymentStates.upload_receipt, F.document)
+async def handle_receipt_document(message: Message, state: FSMContext):
+    data = await state.get_data()
+    row_num = data.get('saved_row', '?')
+    payment_data = data.get('payment_data_cache', data)
+    doc = message.document
+    caption = _build_notify_caption(payment_data, row_num)
+
+    try:
+        file_info = await message.bot.get_file(doc.file_id)
+        file_bytes = await message.bot.download_file(file_info.file_path)
+
+        kassa_bot = await _get_kassa_bot()
+        if kassa_bot:
+            try:
+                from aiogram.types import BufferedInputFile
+                input_file = BufferedInputFile(
+                    file_bytes.read(),
+                    filename=doc.file_name or f'receipt_{row_num}'
+                )
+                for chat_id in _get_kassa_targets():
+                    try:
+                        await kassa_bot.send_document(
+                            chat_id=chat_id,
+                            document=input_file,
+                            caption=caption,
+                            parse_mode='HTML'
+                        )
+                    except Exception as e:
+                        logger.warning(f'kassa doc to {chat_id}: {e}')
+            finally:
+                await kassa_bot.session.close()
+            await message.answer('✅ Файл оплаты отправлен!')
+        else:
+            await message.answer('⚠️ KASSA_BOT_TOKEN не настроен.')
+    except Exception as e:
+        logger.error(f'Receipt doc error: {e}', exc_info=True)
+        await message.answer(f'⚠️ Не удалось отправить файл: {e}')
 
     await state.clear()
 
@@ -443,19 +538,11 @@ async def skip_receipt(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text('▶️ Скрин пропущен. Оплата записана.')
     await state.clear()
     await callback.answer()
-```
 
-Также вверху файла **удали** строку:
-```
-from services.drive_upload import upload_receipt
-```
 
-И замени:
-```
-from services.sheets import add_payment, update_receipt_link
-```
-на:
-```
-from services.sheets import add_payment
+# ── Отмена ──
+@router.callback_query(PaymentStates.confirm, F.data == 'pay_cancel')
+async def cancel_payment(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
     await callback.message.edit_text('❌ Отменено.')
     await callback.answer()
