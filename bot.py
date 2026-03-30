@@ -37,15 +37,23 @@ async def planted_handler(callback: CallbackQuery):
     month = int(parts[2])
     ok = mark_planted(row_num, month)
     if ok:
-        await callback.message.edit_text(
-            callback.message.text + "\n\n✅ <b>ПОСАЖЕНО</b>",
-            parse_mode="HTML"
-        )
+        if callback.message.photo or callback.message.document:
+            # Фото/файл — используем edit_caption
+            old_caption = callback.message.caption or ""
+            await callback.message.edit_caption(
+                caption=old_caption + "\n\n✅ <b>ПОСАЖЕНО</b>",
+                parse_mode="HTML",
+                reply_markup=None
+            )
+        else:
+            # Текстовое сообщение — используем edit_text
+            await callback.message.edit_text(
+                callback.message.text + "\n\n✅ <b>ПОСАЖЕНО</b>",
+                parse_mode="HTML",
+                reply_markup=None
+            )
     else:
-        await callback.message.edit_text(
-            callback.message.text + "\n\n❌ Ошибка при посадке.",
-            parse_mode="HTML"
-        )
+        await callback.answer("❌ Ошибка при посадке.", show_alert=True)
     await callback.answer()
 
 async def main():
