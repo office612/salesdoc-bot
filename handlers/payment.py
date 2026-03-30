@@ -92,7 +92,7 @@ def _build_notify_caption(data: dict, row_num: int) -> str:
 
 def _get_kassa_targets() -> list:
     """Мырзахыт + Гульшан."""
-    return [DIRECTOR_ID, 851483315]
+    return [DIRECTOR_ID, 7163415706]
 
 
 async def _get_kassa_bot():
