@@ -113,7 +113,7 @@ async def notify_all(bot: Bot, data: dict, row_num: int):
                 # Кнопка «Посажено» для записи в таблицу
                 planted_kb = InlineKeyboardMarkup(inline_keyboard=[[
                     InlineKeyboardButton(
-                        text='✅ Посажено',
+                        text='❓ Посажено?',
                         callback_data=f'planted:{row_num}:{data.get("month", 0)}'
                     )
                 ]])
@@ -384,7 +384,7 @@ async def handle_receipt_photo(message: Message, state: FSMContext):
                 inp = BufferedInputFile(file_bytes.read(), filename=f'receipt_{row_num}.jpg')
                 for chat_id in _get_kassa_targets():
                     try:
-                        planted_kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text='✅ Посажено', callback_data=f'planted:{row_num}:{payment_data.get("month", 0)}')]])
+                        planted_kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text='❓ Посажено?', callback_data=f'planted:{row_num}:{payment_data.get("month", 0)}')]])
                         await kassa_bot.send_photo(chat_id=chat_id, photo=inp, caption=caption, parse_mode='HTML', reply_markup=planted_kb)
                     except Exception as e:
                         logger.warning(f'kassa photo to {chat_id}: {e}')
@@ -415,7 +415,7 @@ async def handle_receipt_document(message: Message, state: FSMContext):
                 inp = BufferedInputFile(file_bytes.read(), filename=doc.file_name or f'receipt_{row_num}')
                 for chat_id in _get_kassa_targets():
                     try:
-                        planted_kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text='✅ Посажено', callback_data=f'planted:{row_num}:{payment_data.get("month", 0)}')]])
+                        planted_kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text='❓ Посажено?', callback_data=f'planted:{row_num}:{payment_data.get("month", 0)}')]])
                         await kassa_bot.send_document(chat_id=chat_id, document=inp, caption=caption, parse_mode='HTML', reply_markup=planted_kb)
                     except Exception as e:
                         logger.warning(f'kassa doc to {chat_id}: {e}')
