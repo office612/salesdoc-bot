@@ -53,7 +53,6 @@ def _build_notify_caption(data: dict, row_num: int) -> str:
     client = data.get('client', data.get('company', '—'))
     qty = data.get('qty', 1)
     price = data.get('price', 0)
-    amount = data.get('amount', 0) or int(float(qty or 0) * float(price or 0))
     cat_lbl = data.get('category_label', data.get('category_raw', '—'))
     manager = data.get('manager', '—')
     license_type = data.get('license_type', '')
@@ -61,6 +60,17 @@ def _build_notify_caption(data: dict, row_num: int) -> str:
     bank = data.get('bank', '')
     pdate = data.get('payment_date', '')
     fact = data.get('fact_amount', '')
+    PERIOD_MONTHS = {
+        'Месячный': 1, '3 месячный': 3, '6 месячный': 6,
+        '12 месяцев': 12, '10 дней': 0, '20 дней': 0,
+    }
+    amount = data.get('amount', 0)
+    if not amount:
+        pm = PERIOD_MONTHS.get(period, 0)
+        if pm > 0:
+            amount = int(float(qty or 0) * float(price or 0) * pm)
+        else:
+            amount = int(float(qty or 0) * float(price or 0))
     lines = [
         f'{header}\n',
         f'📅 Месяц: {month_name}',
