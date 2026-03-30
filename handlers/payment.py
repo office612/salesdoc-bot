@@ -56,15 +56,28 @@ def _build_notify_caption(data: dict, row_num: int) -> str:
     amount = data.get('amount', 0) or int(float(qty or 0) * float(price or 0))
     cat_lbl = data.get('category_label', data.get('category_raw', '—'))
     manager = data.get('manager', '—')
-    return (
-        f'{header}\n\n'
-        f'📅 {month_name}\n'
-        f'🏢 {client} | {qty} x {price} тг\n'
-        f'📦 {cat_lbl}\n'
-        f'💰 Итого: {amount} тг\n'
-        f'👤 {manager}\n'
-        f'📊 Строка {row_num}'
-    )
+    license_type = data.get('license_type', '')
+    period = data.get('period', data.get('tariff', ''))
+    bank = data.get('bank', '')
+    pdate = data.get('payment_date', '')
+    fact = data.get('fact_amount', '')
+    lines = [
+        f'{header}\n',
+        f'📅 Месяц: {month_name}',
+        f'📆 Дата оплаты: {pdate}' if pdate else '',
+        f'🏢 Клиент: {client}',
+        f'📦 Статья: {cat_lbl}',
+        f'📄 Лицензия: {license_type}' if license_type else '',
+        f'🔢 Кол-во: {qty}',
+        f'⏱ Тариф: {period}' if period else '',
+        f'💵 Цена: {price} тг',
+        f'💰 Итого: {amount} тг',
+        f'💵 Факт: {fact} тг' if fact else '',
+        f'🏦 Банк: {bank}' if bank else '',
+        f'👤 Менеджер: {manager}',
+        f'📊 Строка {row_num}',
+    ]
+    return '\n'.join(line for line in lines if line)
 
 
 def _get_kassa_targets() -> list:
