@@ -300,3 +300,25 @@ def register_user(telegram_id: int, name: str, role: str) -> bool:
     except Exception as e:
         logger.error("register_user: " + str(e))
         return False
+
+
+def mark_planted(row_num: int, month: int) -> bool:
+    """Записывает 'Да' в столбец L указанной строки.
+
+    Используется кнопкой Посажено в @kassasdkzbot.
+    """
+    try:
+        sheet_name = MONTH_SHEETS.get(month)
+        if not sheet_name:
+            logger.error(f"mark_planted: неизвестный месяц {month}")
+            return False
+        ss = get_client().open_by_key(SPREADSHEET_ID)
+        ws = ss.worksheet(sheet_name)
+        # Столбец L = 12-й столбец (1-based в gspread)
+        ws.update_cell(int(row_num), 12, "Да")
+        logger.info(f"mark_planted: строка {row_num}, лист {sheet_name} -> Да")
+        return True
+    except Exception as e:
+        logger.error(f"mark_planted error: {e}", exc_info=True)
+        return False
+
