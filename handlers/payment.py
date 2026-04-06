@@ -80,6 +80,7 @@ async def choose_category(callback: CallbackQuery, state: FSMContext):
 
     # Услуги идут напрямую к клиенту
     if cat_key in SERVICE_CATS:
+        await state.update_data(license_type="Услуга", period="Услуга")
         await callback.message.edit_text(
             f"Статья: {cat_label}\nВведите название клиента:"
         )
@@ -511,7 +512,7 @@ async def choose_service_category(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     await state.update_data(
         category_key=svc_key, category=svc_label,
-        qty="", license_type="", period="", price="", amount="",
+        qty="", license_type="Услуга", period="Услуга", price="", amount="",
         is_service=True,
     )
 
