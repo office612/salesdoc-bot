@@ -167,34 +167,39 @@ async def add_payment(data: dict) -> int:
     fact = data.get("fact_amount", "")
     fact_val = int(fact) if fact not in ("", None) else ""
 
-    row = [""] * 23
-    row[0] = payment_date
-    row[1] = data.get("client", data.get("company", ""))
-
-    # C, F, K — матчим со справочником (защита от пробелов в IMPORTRANGE)
+    # A-M (столбцы 1-13) — основные данные
     raw_article = data.get("category_label", data.get("category_raw", data.get("category", "")))
-    row[2] = _match_ref_value(raw_article, "Статьи Доходов")
-    row[3] = data.get("license_type", data.get("license_type_raw", ""))
-    row[4] = qty
     raw_manager = data.get("manager", "")
-    row[5] = _match_ref_value(raw_manager, "Менеджеры")
-    row[6] = period
-    row[7] = price
-    row[8] = period_num if period_num > 0 else ""
-    row[9] = amount
     raw_bank = data.get("bank", "")
-    row[10] = _match_ref_value(raw_bank, "Банки")
-    row[11] = "Нет"
-    row[12] = fact_val
-    start_m = data.get("start_month", "")
-    row[19] = MONTH_SHEETS.get(int(start_m), "") if start_m else ""
-    row[20] = data.get("activation_date", "")
-    row[21] = data.get("act_price", "") or ""
-    cat = data.get("category", data.get("category_raw", ""))
-    if cat in STATUS_CATS:
-        row[22] = "Не выполнено"
 
-    ws.update(f"A{next_row}:W{next_row}", [row], value_input_option="USER_ENTERED")
+    row_am = [
+        payment_date,                                      # A
+        data.get("client", data.get("company", "")),       # B
+        _match_ref_value(raw_article, "Статьи Доходов"),   # C
+        data.get("license_type", data.get("license_type_raw", "")),  # D
+        qty,                                               # E
+        _match_ref_value(raw_manager, "Менеджеры"),        # F
+        period,                                            # G
+        price,                                             # H
+        period_num if period_num > 0 else "",              # I
+        amount,                                            # J
+        _match_ref_value(raw_bank, "Банки"),               # K
+        "Нет",                                             # L
+        fact_val,                                          # M
+    ]
+
+    # T-W (столбцы 20-23) — доп. поля, пропускаем N-S (формулы)
+    start_m = data.get("start_month", "")
+    cat = data.get("category", data.get("category_raw", ""))
+    row_tw = [
+        MONTH_SHEETS.get(int(start_m), "") if start_m else "",  # T
+        data.get("activation_date", ""),                         # U
+        data.get("act_price", "") or "",                         # V
+        "Не выполнено" if cat in STATUS_CATS else "",            # W
+    ]
+
+    ws.update(f"A{next_row}:M{next_row}", [row_am], value_input_option="USER_ENTERED")
+    ws.update(f"T{next_row}:W{next_row}", [row_tw], value_input_option="USER_ENTERED")
     logger.info("Added row=" + str(next_row))
     return next_row
 
