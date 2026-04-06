@@ -160,6 +160,9 @@ async def enter_manual_amount(message: Message, state: FSMContext):
 
     await state.update_data(amount=amount, price=amount)
     data = await state.get_data()
+    if data.get("is_service"):
+        await save_payment(message, state, message._bot)
+        return
     await message.answer(
         f"Клиент: {data['client']}\nСумма: {amount} тг\nВыберите банк:",
         reply_markup=banks_kb("back:manual_amount")
@@ -191,6 +194,9 @@ async def enter_bot_amount(message: Message, state: FSMContext):
 
     await state.update_data(amount=amount, price=amount)
     data = await state.get_data()
+    if data.get("is_service"):
+        await save_payment(message, state, message._bot)
+        return
     await message.answer(
         f"Клиент: {data['client']}\nПериод: {data['period']}\nСумма: {amount} тг\nВыберите банк:",
         reply_markup=banks_kb("back:bot_amount")
@@ -207,6 +213,9 @@ async def choose_package(callback: CallbackQuery, state: FSMContext):
     amount = int(callback.data.split(":")[1])
     await state.update_data(amount=amount, price=amount)
     data = await state.get_data()
+    if data.get("is_service"):
+        await save_payment(callback.message, state, callback.message._bot, callback=callback)
+        return
     await callback.message.edit_text(
         f"Клиент: {data['client']}\nПакет: {amount} тг\nВыберите банк:",
         reply_markup=banks_kb("back:package")
@@ -498,9 +507,13 @@ async def choose_service_category(callback: CallbackQuery, state: FSMContext):
     svc_key = callback.data.split(":")[1]
     svc_label = next((label for key, label in CATEGORIES if key == svc_key), svc_key)
 
-    # Сохраняем выбранную услугу
+    # Сохраняем выбранную услугу, очищаем поля лицензий
     data = await state.get_data()
-    await state.update_data(category_key=svc_key, category=svc_label)
+    await state.update_data(
+        category_key=svc_key, category=svc_label,
+        qty="", license_type="", period="", price="", amount="",
+        is_service=True,
+    )
 
     # В зависимости от типа услуги
     if svc_key in MANUAL_AMOUNT_CATS:

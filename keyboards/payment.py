@@ -96,10 +96,14 @@ def skip_receipt_kb() -> InlineKeyboardMarkup:
 
 
 def months_kb() -> InlineKeyboardMarkup:
-    buttons = [
-        [InlineKeyboardButton(text=name, callback_data=f'month:{num}')]
-        for num, name in MONTH_SHEETS.items()
-    ]
+    items = list(MONTH_SHEETS.items())
+    buttons = []
+    for i in range(0, len(items), 3):
+        row = [
+            InlineKeyboardButton(text=name, callback_data=f'month:{num}')
+            for num, name in items[i:i+3]
+        ]
+        buttons.append(row)
     buttons.append([InlineKeyboardButton(text="Отмена", callback_data="cancel")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
