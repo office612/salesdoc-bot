@@ -9,7 +9,7 @@ from keyboards.payment import (
     package_kb, categories_kb, license_types_kb, periods_kb,
     banks_kb, confirm_kb, skip_receipt_kb, months_kb, confirm_price_kb,
     payment_date_kb, bot_periods_kb, manual_amount_kb, add_service_kb,
-    back_button, service_categories_kb,
+    back_button, service_categories_kb, calendar_kb,
 )
 from services.sheets import add_payment
 from services.users import get_user_info, is_accountant, is_manager
@@ -296,6 +296,58 @@ async def choose_bank(callback: CallbackQuery, state: FSMContext):
     await state.set_state(PaymentStates.choose_payment_date)
 
 
+# ── Календарь: открыть ──
+@router.callback_query(PaymentStates.choose_payment_date, F.data == 'pdate:cal')
+async def open_calendar(callback: CallbackQuery, state: FSMContext):
+    from datetime import datetime as dt
+    tz = pytz.timezone('Asia/Almaty')
+    now = dt.now(tz)
+    await callback.message.edit_text(
+        'Выберите дату:',
+        reply_markup=calendar_kb(now.year, now.month)
+    )
+    await callback.answer()
+
+
+# ── Календарь: навигация ◀ ▶ ──
+@router.callback_query(PaymentStates.choose_payment_date, F.data.startswith('pdate:nav:'))
+async def navigate_calendar(callback: CallbackQuery, state: FSMContext):
+    parts = callback.data.split(':')
+    year = int(parts[2])
+    month = int(parts[3])
+    delta = int(parts[4])
+    month += delta
+    if month < 1:
+        month = 12
+        year -= 1
+    elif month > 12:
+        month = 1
+        year += 1
+    await callback.message.edit_reply_markup(
+        reply_markup=calendar_kb(year, month)
+    )
+    await callback.answer()
+
+
+# ── Календарь: выбор дня ──
+@router.callback_query(PaymentStates.choose_payment_date, F.data.startswith('pdate:day:'))
+async def pick_calendar_day(callback: CallbackQuery, state: FSMContext):
+    date_str = callback.data.split(':', 2)[2]  # "06.04.2026"
+    await state.update_data(payment_date=date_str)
+    await callback.message.edit_text(
+        "Отправьте фото/файл чека или нажмите 'Пропустить':",
+        reply_markup=skip_receipt_kb()
+    )
+    await state.set_state(PaymentStates.upload_receipt)
+    await callback.answer()
+
+
+# ── Календарь: пустые кнопки ──
+@router.callback_query(PaymentStates.choose_payment_date, F.data == 'pdate:noop')
+async def noop_calendar(callback: CallbackQuery):
+    await callback.answer()
+
+
 @router.callback_query(PaymentStates.choose_payment_date, F.data.startswith("pdate:"))
 async def choose_payment_date(callback: CallbackQuery, state: FSMContext):
     date_str = callback.data.split(":")[1]
@@ -368,17 +420,15 @@ async def save_payment(message: Message, state: FSMContext, bot: Bot, callback=N
         "bank": data.get("bank", ""),
         "payment_date": data.get("payment_date", ""),
         "receipt_file_id": data.get("receipt_file_id", ""),
+        "month": data.get("month"),
     }
 
     # Статус услуги для внедрений/интеграций
     if cat_key in STATUS_CATS:
         row_data["service_status"] = "Не выполнено"
 
-    month = data.get("month", datetime.now().month)
-    sheet_name = MONTH_SHEETS.get(month, "Янв")
-
     try:
-        add_payment(sheet_name, row_data)
+        await add_payment(row_data)
         result_text = f"Оплата записана!\n{data.get('client')} - {data.get('amount')} тг"
 
         # Уведомление директору
