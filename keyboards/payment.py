@@ -63,16 +63,18 @@ def periods_kb(show_all: bool = False) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def confirm_price_kb(new_price: int, old_price: int) -> InlineKeyboardMarkup:
-    if new_price == old_price:
+def confirm_price_kb(new_total: int, old_total: int, new_unit: int = 0, old_unit: int = 0) -> InlineKeyboardMarkup:
+    nu = new_unit or new_total
+    ou = old_unit or old_total
+    if new_total == old_total:
         buttons = [
-            [InlineKeyboardButton(text=f"Подтвердить: {new_price:,} тг".replace(",", " "), callback_data=f"price:confirm:{new_price}")],
+            [InlineKeyboardButton(text=f"Подтвердить: {new_total:,} тг".replace(",", " "), callback_data=f"price:confirm:{new_total}:{nu}")],
             [InlineKeyboardButton(text="Ввести вручную", callback_data="price:manual")],
         ]
     else:
         buttons = [
-            [InlineKeyboardButton(text=f"Новый клиент: {new_price:,} тг".replace(",", " "), callback_data=f"price:confirm:{new_price}")],
-            [InlineKeyboardButton(text=f"Старый клиент: {old_price:,} тг".replace(",", " "), callback_data=f"price:confirm:{old_price}")],
+            [InlineKeyboardButton(text=f"Новый клиент: {new_total:,} тг".replace(",", " "), callback_data=f"price:confirm:{new_total}:{nu}")],
+            [InlineKeyboardButton(text=f"Старый клиент: {old_total:,} тг".replace(",", " "), callback_data=f"price:confirm:{old_total}:{ou}")],
             [InlineKeyboardButton(text="Ввести вручную", callback_data="price:manual")],
         ]
     buttons.append([back_button("back:period")])

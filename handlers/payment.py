@@ -276,19 +276,24 @@ async def choose_period(callback: CallbackQuery, state: FSMContext):
     qty = data.get("qty", 1)
     months = PERIOD_MONTHS.get(period, 1)
     multiplier = months if months > 0 else 1
-    new_price = PRICES_NEW.get(period, 0) * qty * multiplier
-    old_price = PRICES_OLD.get(period, 0) * qty * multiplier
+    new_unit = PRICES_NEW.get(period, 0)
+    old_unit = PRICES_OLD.get(period, 0)
+    new_total = new_unit * qty * multiplier
+    old_total = old_unit * qty * multiplier
+    # Передаём unit:total в callback_data
     await callback.message.edit_text(
         f"Тариф: {period}\nВыберите цену:",
-        reply_markup=confirm_price_kb(new_price, old_price)
+        reply_markup=confirm_price_kb(new_total, old_total, new_unit, old_unit)
     )
     await state.set_state(PaymentStates.confirm_price)
 
 
 @router.callback_query(PaymentStates.confirm_price, F.data.startswith("price:confirm:"))
 async def confirm_price(callback: CallbackQuery, state: FSMContext):
-    price = int(callback.data.split(":")[2])
-    await state.update_data(price=price, amount=price)
+    parts = callback.data.split(":")
+    total = int(parts[2])
+    unit_price = int(parts[3]) if len(parts) > 3 else total
+    await state.update_data(price=unit_price, amount=total)
     data = await state.get_data()
     await callback.message.edit_text(
         f"Сумма: {price} тг\nВыберите банк:",
