@@ -239,8 +239,10 @@ async def choose_period(callback: CallbackQuery, state: FSMContext):
     await state.update_data(period=period)
     data = await state.get_data()
     qty = data.get("qty", 1)
-    new_price = PRICES_NEW.get(period, 0) * qty
-    old_price = PRICES_OLD.get(period, 0) * qty
+    months = PERIOD_MONTHS.get(period, 1)
+    multiplier = months if months > 0 else 1
+    new_price = PRICES_NEW.get(period, 0) * qty * multiplier
+    old_price = PRICES_OLD.get(period, 0) * qty * multiplier
     await callback.message.edit_text(
         f"Тариф: {period}\nВыберите цену:",
         reply_markup=confirm_price_kb(new_price, old_price)
