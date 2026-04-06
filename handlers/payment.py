@@ -472,13 +472,28 @@ async def save_payment(message: Message, state: FSMContext, bot: Bot, callback=N
         if kassa_token:
             from aiogram.client.default import DefaultBotProperties
             from aiogram.enums import ParseMode as PM
+            from io import BytesIO
+            from aiogram.types import BufferedInputFile
             kassa_bot = Bot(token=kassa_token, default=DefaultBotProperties(parse_mode=PM.HTML))
+
+            # Скачиваем фото чека через основной бот
+            photo_bytes = None
+            if receipt_file_id:
+                try:
+                    file = await bot.get_file(receipt_file_id)
+                    bio = BytesIO()
+                    await bot.download_file(file.file_path, bio)
+                    photo_bytes = bio.getvalue()
+                except Exception as e:
+                    logger.error(f"Download receipt: {e}")
+
             notify_ids = [DIRECTOR_ID] + ACCOUNTANT_IDS
             for uid in notify_ids:
                 try:
-                    if receipt_file_id:
+                    if photo_bytes:
                         await kassa_bot.send_photo(
-                            uid, receipt_file_id,
+                            uid,
+                            BufferedInputFile(photo_bytes, filename="receipt.jpg"),
                             caption=notify_text,
                             reply_markup=planted_kb
                         )
