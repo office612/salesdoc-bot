@@ -440,18 +440,56 @@ async def save_payment(message: Message, state: FSMContext, bot: Bot, callback=N
         row_data["service_status"] = "Не выполнено"
 
     try:
-        await add_payment(row_data)
+        row_num = await add_payment(row_data)
         result_text = f"Оплата записана!\n{data.get('client')} - {data.get('amount')} тг"
 
-        # Уведомление директору
-        try:
-            await bot.send_message(
-                DIRECTOR_ID,
-                f"Новая оплата:\nКлиент: {data.get('client')}\n"
-                f"Сумма: {data.get('amount')} тг\nМенеджер: {data.get('manager')}"
-            )
-        except Exception as e:
-            logger.error(f"Failed to notify director: {e}")
+        # Уведомление через кассабот
+        month = data.get("month", datetime.now().month)
+        month_name = MONTH_SHEETS.get(month, "")
+        receipt_file_id = data.get("receipt_file_id")
+
+        notify_text = (
+            f"💳 <b>Новая оплата!</b>\n\n"
+            f"📅 Месяц: {month_name}\n"
+            f"📅 Дата оплаты: {data.get('payment_date', '')}\n"
+            f"🏢 Клиент: {data.get('client', '')}\n"
+            f"📋 Статья: {data.get('category', '')}\n"
+            f"📁 Лицензия: {data.get('license_type', '')}\n"
+            f"🔢 Кол-во: {data.get('qty', '')}\n"
+            f"⚙ Тариф: {data.get('period', '')}\n"
+            f"💲 Цена: {data.get('price', '')} тг\n"
+            f"💰 Итого: {data.get('amount', '')} тг\n"
+            f"🏦 Банк: {data.get('bank', '')}\n"
+            f"👤 Менеджер: {data.get('manager', '')}\n"
+            f"📊 Строка {row_num}"
+        )
+
+        planted_kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❓ Посажено?", callback_data=f"planted:{row_num}:{month}")]
+        ])
+
+        kassa_token = os.getenv("KASSA_BOT_TOKEN", "")
+        if kassa_token:
+            from aiogram.client.default import DefaultBotProperties
+            from aiogram.enums import ParseMode as PM
+            kassa_bot = Bot(token=kassa_token, default=DefaultBotProperties(parse_mode=PM.HTML))
+            notify_ids = [DIRECTOR_ID] + ACCOUNTANT_IDS
+            for uid in notify_ids:
+                try:
+                    if receipt_file_id:
+                        await kassa_bot.send_photo(
+                            uid, receipt_file_id,
+                            caption=notify_text,
+                            reply_markup=planted_kb
+                        )
+                    else:
+                        await kassa_bot.send_message(
+                            uid, notify_text,
+                            reply_markup=planted_kb
+                        )
+                except Exception as e:
+                    logger.error(f"Kassa notify {uid}: {e}")
+            await kassa_bot.session.close()
 
     except Exception as e:
         logger.error(f"Failed to save payment: {e}")
