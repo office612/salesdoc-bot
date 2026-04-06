@@ -306,11 +306,21 @@ async def enter_price(message: Message, state: FSMContext):
 async def choose_bank(callback: CallbackQuery, state: FSMContext):
     bank = callback.data.split(":")[1]
     await state.update_data(bank=bank)
-    await callback.message.edit_text(
-        f"Банк: {bank}\nВыберите дату оплаты:",
-        reply_markup=payment_date_kb()
-    )
-    await state.set_state(PaymentStates.choose_payment_date)
+    data = await state.get_data()
+
+    # Новый клиент → сначала спросить про услуги, потом дата/чек
+    if data.get("category_key") == "new_client":
+        await callback.message.edit_text(
+            "Добавить услугу к этому клиенту?",
+            reply_markup=add_service_kb()
+        )
+        await state.set_state(PaymentStates.ask_add_service)
+    else:
+        await callback.message.edit_text(
+            f"Банк: {bank}\nВыберите дату оплаты:",
+            reply_markup=payment_date_kb()
+        )
+        await state.set_state(PaymentStates.choose_payment_date)
 
 
 # ── Календарь: открыть ──
@@ -520,21 +530,7 @@ async def save_payment(message: Message, state: FSMContext, bot: Bot, callback=N
     else:
         await message.answer(result_text)
 
-    # Если это новый клиент — спросить про услугу
-    if cat_key == "new_client":
-        if callback:
-            await callback.message.answer(
-                "Добавить услугу к этому клиенту?",
-                reply_markup=add_service_kb()
-            )
-        else:
-            await message.answer(
-                "Добавить услугу к этому клиенту?",
-                reply_markup=add_service_kb()
-            )
-        await state.set_state(PaymentStates.ask_add_service)
-    else:
-        await state.clear()
+    await state.clear()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -551,14 +547,20 @@ async def add_service_yes(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(PaymentStates.ask_add_service, F.data == "add_service:no")
 async def add_service_no(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("Готово!")
-    await state.clear()
+    await callback.message.edit_text(
+        "Выберите дату оплаты:",
+        reply_markup=payment_date_kb()
+    )
+    await state.set_state(PaymentStates.choose_payment_date)
 
 
 @router.callback_query(PaymentStates.ask_add_service, F.data == "add_service:done")
 async def add_service_done(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("Все услуги добавлены!")
-    await state.clear()
+    await callback.message.edit_text(
+        "Выберите дату оплаты:",
+        reply_markup=payment_date_kb()
+    )
+    await state.set_state(PaymentStates.choose_payment_date)
 
 
 @router.callback_query(PaymentStates.ask_add_service, F.data.startswith("svc:"))
