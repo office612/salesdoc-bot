@@ -13,6 +13,7 @@ from keyboards.payment import (
 )
 from services.sheets import add_payment
 from services.users import get_user_info, is_accountant, is_manager, fix_legacy_name
+from services.planted_store import save_messages
 from config import (
     CATEGORIES, DIRECTOR_ID, ACCOUNTANT_IDS, MONTH_SHEETS,
     PRICES_NEW, PRICES_OLD, TIMEZONE, EMPLOYEES, LEADER,
@@ -579,11 +580,12 @@ async def save_payment(message: Message, state: FSMContext, bot: Bot, callback=N
         lines.append(f"📊 Строки: {', '.join(str(r) for r in row_nums)}")
         notify_text = "\n".join(lines)
 
-        # Кнопка Посажено для первой строки
+        # Кнопка Посажено для ВСЕХ строк
+        rows_str = ",".join(str(r) for r in row_nums)
         planted_kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
                 text="❓ Посажено?",
-                callback_data=f"planted:{row_nums[0]}:{month}"
+                callback_data=f"planted:{rows_str}:{month}"
             )]
         ])
 
@@ -606,22 +608,29 @@ async def save_payment(message: Message, state: FSMContext, bot: Bot, callback=N
                     logger.error(f"Download receipt: {e}")
 
             notify_ids = [DIRECTOR_ID] + ACCOUNTANT_IDS
+            sent_messages = []  # (chat_id, message_id) для planted_store
             for uid in notify_ids:
                 try:
                     if photo_bytes:
-                        await kassa_bot.send_photo(
+                        sent = await kassa_bot.send_photo(
                             uid,
                             BufferedInputFile(photo_bytes, filename="receipt.jpg"),
                             caption=notify_text,
                             reply_markup=planted_kb
                         )
                     else:
-                        await kassa_bot.send_message(
+                        sent = await kassa_bot.send_message(
                             uid, notify_text,
                             reply_markup=planted_kb
                         )
+                    sent_messages.append((uid, sent.message_id))
                 except Exception as e:
                     logger.error(f"Kassa notify {uid}: {e}")
+
+            # Сохраняем message_id чтобы при нажатии "Посажено" обновить ВСЕ сообщения
+            planted_key = f"{rows_str}:{month}"
+            save_messages(planted_key, sent_messages)
+
             await kassa_bot.session.close()
 
     except Exception as e:

@@ -13,6 +13,7 @@ from config import BOT_TOKEN
 from handlers import start, payment, reports
 
 from services.sheets import mark_planted
+from services.planted_store import get_messages
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,25 +34,72 @@ async def planted_handler(callback: CallbackQuery):
     if len(parts) != 3:
         await callback.answer("Неверные данные", show_alert=True)
         return
-    row_num = int(parts[1])
+    rows_str = parts[1]  # может быть "8" или "8,9,10"
     month = int(parts[2])
-    ok = mark_planted(row_num, month)
-    if ok:
-        if callback.message.photo or callback.message.document:
-            # Фото/файл — используем edit_caption
-            old_caption = callback.message.caption or ""
-            await callback.message.edit_caption(
-                caption=old_caption + "\n\n✅ <b>ПОСАЖЕНО</b>",
-                parse_mode="HTML",
-                reply_markup=None
-            )
-        else:
-            # Текстовое сообщение — используем edit_text
-            await callback.message.edit_text(
-                callback.message.text + "\n\n✅ <b>ПОСАЖЕНО</b>",
-                parse_mode="HTML",
-                reply_markup=None
-            )
+
+    # Маркируем ВСЕ строки как посаженные
+    row_nums = [int(r) for r in rows_str.split(",")]
+    all_ok = True
+    for row_num in row_nums:
+        ok = mark_planted(row_num, month)
+        if not ok:
+            all_ok = False
+
+    if all_ok:
+        planted_key = f"{rows_str}:{month}"
+        stored = get_messages(planted_key)
+
+        # Редактируем сообщение того кто нажал
+        try:
+            if callback.message.photo or callback.message.document:
+                old_caption = callback.message.caption or ""
+                await callback.message.edit_caption(
+                    caption=old_caption + "\n\n✅ <b>ПОСАЖЕНО</b>",
+                    parse_mode="HTML",
+                    reply_markup=None
+                )
+            else:
+                await callback.message.edit_text(
+                    callback.message.text + "\n\n✅ <b>ПОСАЖЕНО</b>",
+                    parse_mode="HTML",
+                    reply_markup=None
+                )
+        except Exception as e:
+            logger.error(f"Edit own planted msg: {e}")
+
+        # Редактируем сообщения ДРУГИХ пользователей
+        clicker_chat = callback.message.chat.id
+        for chat_id, msg_id in stored:
+            if chat_id == clicker_chat:
+                continue  # уже отредактировали выше
+            try:
+                # Пробуем edit_caption (для фото) и edit_text (для текста)
+                try:
+                    await callback.bot.edit_message_caption(
+                        chat_id=chat_id,
+                        message_id=msg_id,
+                        caption=None,  # будет fallback на edit_text
+                        reply_markup=None
+                    )
+                except Exception:
+                    pass
+                # Для текстовых сообщений
+                try:
+                    await callback.bot.edit_message_reply_markup(
+                        chat_id=chat_id,
+                        message_id=msg_id,
+                        reply_markup=None
+                    )
+                except Exception:
+                    pass
+                # Отправляем ответное сообщение что посажено
+                await callback.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"✅ <b>ПОСАЖЕНО</b> (строки: {rows_str})",
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"Edit other planted msg {chat_id}: {e}")
     else:
         await callback.answer("❌ Ошибка при посадке.", show_alert=True)
     await callback.answer()
