@@ -9,10 +9,10 @@ from keyboards.payment import (
     package_kb, categories_kb, license_types_kb, periods_kb,
     banks_kb, confirm_kb, skip_receipt_kb, months_kb, confirm_price_kb,
     payment_date_kb, bot_periods_kb, manual_amount_kb, add_service_kb,
-    back_button, service_categories_kb, calendar_kb,
+    back_button, service_categories_kb, calendar_kb, managers_kb,
 )
 from services.sheets import add_payment
-from services.users import get_user_info, is_accountant, is_manager
+from services.users import get_user_info, is_accountant, is_manager, fix_legacy_name
 from config import (
     CATEGORIES, DIRECTOR_ID, ACCOUNTANT_IDS, MONTH_SHEETS,
     PRICES_NEW, PRICES_OLD, TIMEZONE, EMPLOYEES, LEADER,
@@ -38,9 +38,15 @@ async def start_payment_text(message: Message, state: FSMContext):
     if not user:
         await message.answer("Вы не авторизованы. Нажмите /start")
         return
-    await state.update_data(manager=user["name"])
-    await message.answer("Выберите месяц:", reply_markup=months_kb())
-    await state.set_state(PaymentStates.choose_month)
+    user = fix_legacy_name(message.from_user.id, user)
+
+    if is_accountant(user):
+        await message.answer("Выберите менеджера:", reply_markup=managers_kb())
+        await state.set_state(PaymentStates.choose_manager)
+    else:
+        await state.update_data(manager=user["name"])
+        await message.answer("Выберите месяц:", reply_markup=months_kb())
+        await state.set_state(PaymentStates.choose_month)
 
 
 @router.callback_query(F.data == "new_payment")
@@ -50,7 +56,21 @@ async def start_payment(callback: CallbackQuery, state: FSMContext):
     if not user:
         await callback.answer("Вы не авторизованы", show_alert=True)
         return
-    await state.update_data(manager=user["name"])
+    user = fix_legacy_name(callback.from_user.id, user)
+
+    if is_accountant(user):
+        await callback.message.edit_text("Выберите менеджера:", reply_markup=managers_kb())
+        await state.set_state(PaymentStates.choose_manager)
+    else:
+        await state.update_data(manager=user["name"])
+        await callback.message.edit_text("Выберите месяц:", reply_markup=months_kb())
+        await state.set_state(PaymentStates.choose_month)
+
+
+@router.callback_query(PaymentStates.choose_manager, F.data.startswith("mgr:"))
+async def choose_manager(callback: CallbackQuery, state: FSMContext):
+    manager = callback.data.split(":", 1)[1]
+    await state.update_data(manager=manager)
     await callback.message.edit_text("Выберите месяц:", reply_markup=months_kb())
     await state.set_state(PaymentStates.choose_month)
 

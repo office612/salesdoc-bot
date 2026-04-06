@@ -2,15 +2,26 @@ from aiogram.fsm.state import State, StatesGroup
 
 
 class PaymentStates(StatesGroup):
-    choose_category = State()
-    choose_license  = State()
-    enter_client    = State()
-    enter_qty       = State()
-    choose_period   = State()
-    enter_price     = State()
-    enter_amount    = State()
-    choose_bank     = State()
-    confirm         = State()
+    choose_manager       = State()
+    choose_month         = State()
+    choose_category      = State()
+    choose_license       = State()
+    enter_client         = State()
+    enter_qty            = State()
+    choose_period        = State()
+    confirm_price        = State()
+    enter_price          = State()
+    enter_amount         = State()
+    enter_manual_amount  = State()
+    choose_bot_period    = State()
+    enter_bot_amount     = State()
+    choose_package       = State()
+    choose_bank          = State()
+    ask_add_service      = State()
+    choose_payment_date  = State()
+    enter_payment_date   = State()
+    upload_receipt       = State()
+    confirm              = State()
 
 
 class AuthStates(StatesGroup):
