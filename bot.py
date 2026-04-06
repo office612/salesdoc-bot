@@ -45,64 +45,53 @@ async def planted_handler(callback: CallbackQuery):
         if not ok:
             all_ok = False
 
-    if all_ok:
-        planted_key = f"{rows_str}:{month}"
-        stored = get_messages(planted_key)
-
-        # Редактируем сообщение того кто нажал
-        try:
-            if callback.message.photo or callback.message.document:
-                old_caption = callback.message.caption or ""
-                await callback.message.edit_caption(
-                    caption=old_caption + "\n\n✅ <b>ПОСАЖЕНО</b>",
-                    parse_mode="HTML",
-                    reply_markup=None
-                )
-            else:
-                await callback.message.edit_text(
-                    callback.message.text + "\n\n✅ <b>ПОСАЖЕНО</b>",
-                    parse_mode="HTML",
-                    reply_markup=None
-                )
-        except Exception as e:
-            logger.error(f"Edit own planted msg: {e}")
-
-        # Редактируем сообщения ДРУГИХ пользователей
-        clicker_chat = callback.message.chat.id
-        for chat_id, msg_id in stored:
-            if chat_id == clicker_chat:
-                continue  # уже отредактировали выше
-            try:
-                # Пробуем edit_caption (для фото) и edit_text (для текста)
-                try:
-                    await callback.bot.edit_message_caption(
-                        chat_id=chat_id,
-                        message_id=msg_id,
-                        caption=None,  # будет fallback на edit_text
-                        reply_markup=None
-                    )
-                except Exception:
-                    pass
-                # Для текстовых сообщений
-                try:
-                    await callback.bot.edit_message_reply_markup(
-                        chat_id=chat_id,
-                        message_id=msg_id,
-                        reply_markup=None
-                    )
-                except Exception:
-                    pass
-                # Отправляем ответное сообщение что посажено
-                await callback.bot.send_message(
-                    chat_id=chat_id,
-                    text=f"✅ <b>ПОСАЖЕНО</b> (строки: {rows_str})",
-                    parse_mode="HTML"
-                )
-            except Exception as e:
-                logger.error(f"Edit other planted msg {chat_id}: {e}")
-    else:
+    if not all_ok:
         await callback.answer("❌ Ошибка при посадке.", show_alert=True)
-    await callback.answer()
+        return
+
+    # Редактируем сообщение того кто нажал
+    planted_label = f"\n\n✅ <b>ПОСАЖЕНО</b> (строки: {rows_str})"
+    try:
+        if callback.message.photo or callback.message.document:
+            old_caption = callback.message.caption or ""
+            await callback.message.edit_caption(
+                caption=old_caption + planted_label,
+                parse_mode="HTML",
+                reply_markup=None
+            )
+        else:
+            await callback.message.edit_text(
+                callback.message.text + planted_label,
+                parse_mode="HTML",
+                reply_markup=None
+            )
+    except Exception as e:
+        logger.error(f"Edit own planted msg: {e}")
+
+    # Редактируем сообщения ДРУГИХ пользователей
+    planted_key = f"{rows_str}:{month}"
+    stored = get_messages(planted_key)
+    clicker_chat = callback.message.chat.id
+    for chat_id, msg_id in stored:
+        if chat_id == clicker_chat:
+            continue
+        try:
+            # Убираем кнопку и отправляем уведомление
+            await callback.bot.edit_message_reply_markup(
+                chat_id=chat_id, message_id=msg_id, reply_markup=None
+            )
+        except Exception:
+            pass
+        try:
+            await callback.bot.send_message(
+                chat_id=chat_id,
+                text=f"✅ <b>ПОСАЖЕНО</b> (строки: {rows_str})",
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            logger.error(f"Notify other planted {chat_id}: {e}")
+
+    await callback.answer("✅ Посажено!")
 
 async def main():
     # ── Основной бот @sakesdocbot ──
