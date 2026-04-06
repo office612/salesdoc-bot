@@ -182,7 +182,7 @@ async def enter_manual_amount(message: Message, state: FSMContext):
     await state.update_data(amount=amount, price=amount)
     data = await state.get_data()
     if data.get("is_service"):
-        await save_payment(message, state, message._bot)
+        await _add_service_to_list(message, state)
         return
     await message.answer(
         f"Клиент: {data['client']}\nСумма: {amount} тг\nВыберите банк:",
@@ -216,7 +216,7 @@ async def enter_bot_amount(message: Message, state: FSMContext):
     await state.update_data(amount=amount, price=amount)
     data = await state.get_data()
     if data.get("is_service"):
-        await save_payment(message, state, message._bot)
+        await _add_service_to_list(message, state)
         return
     await message.answer(
         f"Клиент: {data['client']}\nПериод: {data['period']}\nСумма: {amount} тг\nВыберите банк:",
@@ -235,7 +235,7 @@ async def choose_package(callback: CallbackQuery, state: FSMContext):
     await state.update_data(amount=amount, price=amount)
     data = await state.get_data()
     if data.get("is_service"):
-        await save_payment(callback.message, state, callback.message._bot, callback=callback)
+        await _add_service_to_list(callback.message, state, callback=callback)
         return
     await callback.message.edit_text(
         f"Клиент: {data['client']}\nПакет: {amount} тг\nВыберите банк:",
@@ -328,8 +328,18 @@ async def choose_bank(callback: CallbackQuery, state: FSMContext):
     await state.update_data(bank=bank)
     data = await state.get_data()
 
-    # Новый клиент → сначала спросить про услуги, потом дата/чек
+    # Новый клиент → сохраняем данные лицензии, спрашиваем про услуги
     if data.get("category_key") == "new_client":
+        main_payment = {
+            "category": data.get("category", ""),
+            "category_key": data.get("category_key", ""),
+            "license_type": data.get("license_type", ""),
+            "qty": data.get("qty", ""),
+            "period": data.get("period", ""),
+            "price": data.get("price", ""),
+            "amount": data.get("amount", ""),
+        }
+        await state.update_data(main_payment=main_payment, services_list=[])
         await callback.message.edit_text(
             "Добавить услугу к этому клиенту?",
             reply_markup=add_service_kb()
@@ -427,6 +437,38 @@ async def enter_payment_date(message: Message, state: FSMContext):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# НАКОПЛЕНИЕ УСЛУГ
+# ═══════════════════════════════════════════════════════════════════════════════
+
+async def _add_service_to_list(message: Message, state: FSMContext, callback=None):
+    """Добавляет услугу в список и спрашивает 'Добавить ещё?'"""
+    data = await state.get_data()
+    services = data.get("services_list", [])
+    services.append({
+        "category": data.get("category", ""),
+        "category_key": data.get("category_key", ""),
+        "license_type": data.get("license_type", "Услуга"),
+        "period": data.get("period", "Услуга"),
+        "price": data.get("price", ""),
+        "amount": data.get("amount", ""),
+    })
+    await state.update_data(services_list=services, is_service=False)
+
+    svc_text = f"Услуга добавлена: {data.get('category', '')} — {data.get('amount', '')} тг"
+    if callback:
+        await callback.message.edit_text(
+            f"{svc_text}\n\nДобавить ещё услугу?",
+            reply_markup=add_service_kb()
+        )
+    else:
+        await message.answer(
+            f"{svc_text}\n\nДобавить ещё услугу?",
+            reply_markup=add_service_kb()
+        )
+    await state.set_state(PaymentStates.ask_add_service)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # ЗАГРУЗКА ЧЕКА И ЗАПИСЬ
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -452,55 +494,92 @@ async def skip_receipt(callback: CallbackQuery, state: FSMContext, bot: Bot):
 
 async def save_payment(message: Message, state: FSMContext, bot: Bot, callback=None):
     data = await state.get_data()
-    cat_key = data.get("category_key", "")
+    month = data.get("month", datetime.now().month)
+    payment_date = data.get("payment_date", "")
+    receipt_file_id = data.get("receipt_file_id", "")
+    manager = data.get("manager", "")
+    client = data.get("client", "")
+    bank = data.get("bank", "")
 
-    # Формируем строку для таблицы
-    row_data = {
-        "manager": data.get("manager", ""),
-        "client": data.get("client", ""),
-        "category": data.get("category", ""),
-        "license_type": data.get("license_type", ""),
-        "qty": data.get("qty", ""),
-        "period": data.get("period", ""),
-        "price": data.get("price", ""),
-        "amount": data.get("amount", ""),
-        "bank": data.get("bank", ""),
-        "payment_date": data.get("payment_date", ""),
-        "receipt_file_id": data.get("receipt_file_id", ""),
-        "month": data.get("month"),
-    }
+    # Собираем все оплаты для записи
+    payments_to_save = []
 
-    # Статус услуги для внедрений/интеграций
-    if cat_key in STATUS_CATS:
-        row_data["service_status"] = "Не выполнено"
+    main_payment = data.get("main_payment")
+    if main_payment:
+        # Есть основная оплата (лицензия) + возможно услуги
+        payments_to_save.append(main_payment)
+        for svc in data.get("services_list", []):
+            payments_to_save.append(svc)
+    else:
+        # Обычная оплата без услуг
+        payments_to_save.append({
+            "category": data.get("category", ""),
+            "category_key": data.get("category_key", ""),
+            "license_type": data.get("license_type", ""),
+            "qty": data.get("qty", ""),
+            "period": data.get("period", ""),
+            "price": data.get("price", ""),
+            "amount": data.get("amount", ""),
+        })
 
+    row_nums = []
+    total_amount = 0
     try:
-        row_num = await add_payment(row_data)
-        result_text = f"Оплата записана!\n{data.get('client')} - {data.get('amount')} тг"
+        for p in payments_to_save:
+            row_data = {
+                "manager": manager,
+                "client": client,
+                "category": p.get("category", ""),
+                "license_type": p.get("license_type", ""),
+                "qty": p.get("qty", ""),
+                "period": p.get("period", ""),
+                "price": p.get("price", ""),
+                "amount": p.get("amount", ""),
+                "bank": bank,
+                "payment_date": payment_date,
+                "receipt_file_id": receipt_file_id,
+                "month": month,
+            }
+            cat_key = p.get("category_key", "")
+            if cat_key in STATUS_CATS:
+                row_data["service_status"] = "Не выполнено"
+
+            row_num = await add_payment(row_data)
+            row_nums.append(row_num)
+            try:
+                total_amount += int(p.get("amount", 0) or 0)
+            except (ValueError, TypeError):
+                pass
+
+        if len(payments_to_save) == 1:
+            result_text = f"Оплата записана!\n{client} — {total_amount} тг"
+        else:
+            result_text = f"Записано {len(payments_to_save)} строк!\n{client} — {total_amount} тг"
 
         # Уведомление через кассабот
-        month = data.get("month", datetime.now().month)
         month_name = MONTH_SHEETS.get(month, "")
-        receipt_file_id = data.get("receipt_file_id")
+        lines = [f"💳 <b>Новая оплата!</b>\n"]
+        for i, p in enumerate(payments_to_save):
+            lines.append(
+                f"📋 {p.get('category', '')} | "
+                f"{p.get('qty', '') or ''} x {p.get('price', '')} тг = "
+                f"{p.get('amount', '')} тг"
+            )
+        lines.append(f"\n📅 Месяц: {month_name}")
+        lines.append(f"📅 Дата: {payment_date}")
+        lines.append(f"🏢 Клиент: {client}")
+        lines.append(f"🏦 Банк: {bank}")
+        lines.append(f"👤 Менеджер: {manager}")
+        lines.append(f"💰 Итого: {total_amount} тг")
+        lines.append(f"📊 Строки: {', '.join(str(r) for r in row_nums)}")
+        notify_text = "\n".join(lines)
 
-        notify_text = (
-            f"💳 <b>Новая оплата!</b>\n\n"
-            f"📅 Месяц: {month_name}\n"
-            f"📅 Дата оплаты: {data.get('payment_date', '')}\n"
-            f"🏢 Клиент: {data.get('client', '')}\n"
-            f"📋 Статья: {data.get('category', '')}\n"
-            f"📁 Лицензия: {data.get('license_type', '')}\n"
-            f"🔢 Кол-во: {data.get('qty', '')}\n"
-            f"⚙ Тариф: {data.get('period', '')}\n"
-            f"💲 Цена: {data.get('price', '')} тг\n"
-            f"💰 Итого: {data.get('amount', '')} тг\n"
-            f"🏦 Банк: {data.get('bank', '')}\n"
-            f"👤 Менеджер: {data.get('manager', '')}\n"
-            f"📊 Строка {row_num}"
-        )
-
+        # Кнопка Посажено для первой строки
         planted_kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="❓ Посажено?", callback_data=f"planted:{row_num}:{month}")]
+            [InlineKeyboardButton(
+                text="❓ Посажено?",
+                callback_data=f"planted:{row_nums[0]}:{month}"
+            )]
         ])
 
         kassa_token = os.getenv("KASSA_BOT_TOKEN", "")
@@ -511,7 +590,6 @@ async def save_payment(message: Message, state: FSMContext, bot: Bot, callback=N
             from aiogram.types import BufferedInputFile
             kassa_bot = Bot(token=kassa_token, default=DefaultBotProperties(parse_mode=PM.HTML))
 
-            # Скачиваем фото чека через основной бот
             photo_bytes = None
             if receipt_file_id:
                 try:
