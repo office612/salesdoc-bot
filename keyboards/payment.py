@@ -37,18 +37,27 @@ def categories_kb(show_all: bool = False) -> InlineKeyboardMarkup:
 def license_types_kb() -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(text=lt, callback_data=f'lic:{lt}')]
-        for lt in LICENSE_TYPES
+        for lt in LICENSE_TYPES if lt not in ("Баланс", "Услуга")
     ]
     buttons.append([back_button("back:category")])
     buttons.append([InlineKeyboardButton(text="Отмена", callback_data="cancel")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def periods_kb() -> InlineKeyboardMarkup:
-    buttons = [
-        [InlineKeyboardButton(text=p, callback_data=f'per:{p}')]
-        for p in PERIODS if p not in ("Баланс", "Услуга")
-    ]
+TOP_PERIODS = ["3 месячный", "6 месячный", "12 месяцев"]
+
+def periods_kb(show_all: bool = False) -> InlineKeyboardMarkup:
+    if show_all:
+        buttons = [
+            [InlineKeyboardButton(text=p, callback_data=f'per:{p}')]
+            for p in PERIODS if p not in ("Баланс", "Услуга")
+        ]
+    else:
+        buttons = [
+            [InlineKeyboardButton(text=p, callback_data=f'per:{p}')]
+            for p in PERIODS if p in TOP_PERIODS
+        ]
+        buttons.append([InlineKeyboardButton(text="Ещё ▼", callback_data="per:show_all")])
     buttons.append([back_button("back:qty")])
     buttons.append([InlineKeyboardButton(text="Отмена", callback_data="cancel")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)

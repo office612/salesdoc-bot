@@ -243,6 +243,11 @@ async def enter_qty(message: Message, state: FSMContext):
     await state.set_state(PaymentStates.choose_period)
 
 
+@router.callback_query(PaymentStates.choose_period, F.data == "per:show_all")
+async def show_all_periods(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_reply_markup(reply_markup=periods_kb(show_all=True))
+
+
 @router.callback_query(PaymentStates.choose_period, F.data.startswith("per:"))
 async def choose_period(callback: CallbackQuery, state: FSMContext):
     period = callback.data.split(":")[1]
