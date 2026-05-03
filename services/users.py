@@ -1,10 +1,12 @@
-from config import EMPLOYEES, LEADER
+from config import EMPLOYEES, LEADER, DIRECTOR_ID
 from services.sheets import get_user, register_user
 
-# Маппинг старых английских имён на русские
+# Маппинг старых английских имён на русские.
+# ВНИМАНИЕ: 'Aidos' → 'Айдос' (НЕ 'Мирзахит'!), иначе Айдос Хапез
+# при регистрации превращался в руководителя.
 LEGACY_NAMES = {
     'Mirzahait':   'Мирзахит',
-    'Aidos':       'Мирзахит',
+    'Aidos':       'Айдос',
     'Aidos Hapez': 'Айдос Хапез',
     'Yulia':       'Юлия',
     'Akbar':       'Акбар',
@@ -14,13 +16,15 @@ LEGACY_NAMES = {
 }
 
 
-def get_role(name: str) -> str:
-    if name == LEADER:
+def get_role(name: str, telegram_id: int = None) -> str:
+    # Руководитель — только директор по Telegram ID. Имя «Мирзахит»
+    # больше не делает пользователя rukovoditel автоматически.
+    if telegram_id is not None and telegram_id == DIRECTOR_ID:
         return 'rukovoditel'
-    if name in EMPLOYEES['managers']:
-        return 'menedzher'
     if name in EMPLOYEES['accountants']:
         return 'buhgalter'
+    if name in EMPLOYEES['managers']:
+        return 'menedzher'
     return 'menedzher'
 
 
@@ -33,7 +37,7 @@ def get_user_info(telegram_id: int) -> dict | None:
 
 
 def register(telegram_id: int, name: str) -> dict:
-    role = get_role(name)
+    role = get_role(name, telegram_id)
     register_user(telegram_id, name, role)
     return {'name': name, 'role': role}
 
@@ -43,7 +47,7 @@ def fix_legacy_name(telegram_id: int, user: dict) -> dict:
     name = user.get('name', '')
     if name in LEGACY_NAMES:
         new_name = LEGACY_NAMES[name]
-        new_role = get_role(new_name)
+        new_role = get_role(new_name, telegram_id)
         register_user(telegram_id, new_name, new_role)
         user = dict(user)
         user['name'] = new_name
