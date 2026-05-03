@@ -10,6 +10,7 @@ from keyboards.payment import (
     banks_kb, confirm_kb, skip_receipt_kb, months_kb, confirm_price_kb,
     payment_date_kb, bot_periods_kb, manual_amount_kb, add_service_kb,
     back_button, service_categories_kb, calendar_kb, managers_kb,
+    fact_confirm_kb,
 )
 from services.sheets import add_payment
 from services.users import get_user_info, is_accountant, is_manager, fix_legacy_name
@@ -25,6 +26,13 @@ import pytz
 
 logger = logging.getLogger(__name__)
 router = Router()
+
+# Текст подсказки на первом шаге — чтобы сотрудники не путали "месяц вкладки в
+# таблице" с "сегодняшним числом" и не записывали майскую оплату на апрель.
+MONTH_PROMPT = (
+    "📅 <b>За какой месяц</b> проводим оплату?\n"
+    "Это вкладка в таблице — туда попадёт строка."
+)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -46,7 +54,7 @@ async def start_payment_text(message: Message, state: FSMContext):
         await state.set_state(PaymentStates.choose_manager)
     else:
         await state.update_data(manager=user["name"])
-        await message.answer("Выберите месяц:", reply_markup=months_kb())
+        await message.answer(MONTH_PROMPT, reply_markup=months_kb())
         await state.set_state(PaymentStates.choose_month)
 
 
@@ -64,7 +72,7 @@ async def start_payment(callback: CallbackQuery, state: FSMContext):
         await state.set_state(PaymentStates.choose_manager)
     else:
         await state.update_data(manager=user["name"])
-        await callback.message.edit_text("Выберите месяц:", reply_markup=months_kb())
+        await callback.message.edit_text(MONTH_PROMPT, reply_markup=months_kb())
         await state.set_state(PaymentStates.choose_month)
 
 
@@ -72,7 +80,7 @@ async def start_payment(callback: CallbackQuery, state: FSMContext):
 async def choose_manager(callback: CallbackQuery, state: FSMContext):
     manager = callback.data.split(":", 1)[1]
     await state.update_data(manager=manager)
-    await callback.message.edit_text("Выберите месяц:", reply_markup=months_kb())
+    await callback.message.edit_text(MONTH_PROMPT, reply_markup=months_kb())
     await state.set_state(PaymentStates.choose_month)
 
 
@@ -305,20 +313,89 @@ async def confirm_price(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(PaymentStates.confirm_price, F.data == "price:manual")
 async def price_manual(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("Введите сумму вручную:")
+    await callback.message.edit_text(
+        "Введите цену за 1 лицензию (тг):\n"
+        "<i>Если клиент заплатил не по тарифу — фактический итог спросим следующим шагом.</i>"
+    )
     await state.set_state(PaymentStates.enter_price)
 
 
 @router.message(PaymentStates.enter_price)
 async def enter_price(message: Message, state: FSMContext):
+    """Шаг 1 ручного ввода: цена за 1 лицензию (колонка H).
+
+    На основе qty и периода считаем плановую сумму (J = озвучено клиенту),
+    дальше спрашиваем, заплатил ли клиент столько же или иначе → шаг 2.
+    """
     try:
-        price = int(message.text.strip().replace(" ", "").replace(",", ""))
+        unit_price = int(message.text.strip().replace(" ", "").replace(",", ""))
     except ValueError:
         await message.answer("Введите число. Попробуйте ещё раз:")
         return
-    await state.update_data(price=price, amount=price)
+    data = await state.get_data()
+    try:
+        qty = int(data.get("qty", 1) or 1)
+    except (ValueError, TypeError):
+        qty = 1
+    period = data.get("period", "")
+    months = PERIOD_MONTHS.get(period, 1)
+    multiplier = months if months > 0 else 1
+    plan_total = unit_price * qty * multiplier
+
+    # H = unit_price, J = plan_total (озвучено клиенту), M пока пусто.
+    await state.update_data(price=unit_price, amount=plan_total, fact_amount="")
+    unit_str = f"{unit_price:,}".replace(",", " ")
+    plan_str = f"{plan_total:,}".replace(",", " ")
     await message.answer(
-        f"Сумма: {price} тг\nВыберите банк:",
+        f"Цена за лицензию: {unit_str} тг\n"
+        f"Озвучено клиенту: {plan_str} тг ({qty} × {unit_str} × {multiplier})\n\n"
+        f"Клиент заплатил столько же?",
+        reply_markup=fact_confirm_kb(plan_total)
+    )
+    await state.set_state(PaymentStates.confirm_fact)
+
+
+@router.callback_query(PaymentStates.confirm_fact, F.data == "fact:plan")
+async def confirm_fact_plan(callback: CallbackQuery, state: FSMContext):
+    """Клиент заплатил по плану → M остаётся пустым, J = план."""
+    await state.update_data(fact_amount="")
+    data = await state.get_data()
+    plan_str = f"{int(data.get('amount', 0)):,}".replace(",", " ")
+    await callback.message.edit_text(
+        f"Сумма по плану: {plan_str} тг\nВыберите банк:",
+        reply_markup=banks_kb()
+    )
+    await state.set_state(PaymentStates.choose_bank)
+
+
+@router.callback_query(PaymentStates.confirm_fact, F.data == "fact:other")
+async def confirm_fact_other(callback: CallbackQuery, state: FSMContext):
+    """Клиент заплатил не по плану → шаг 2: ввод факта."""
+    data = await state.get_data()
+    plan_str = f"{int(data.get('amount', 0)):,}".replace(",", " ")
+    await callback.message.edit_text(
+        f"Озвучено клиенту: {plan_str} тг\n"
+        f"Введите фактический итог (сколько клиент реально заплатил):"
+    )
+    await state.set_state(PaymentStates.enter_fact)
+
+
+@router.message(PaymentStates.enter_fact)
+async def enter_fact_amount(message: Message, state: FSMContext):
+    """Шаг 2: фактический итог → M."""
+    try:
+        fact_total = int(message.text.strip().replace(" ", "").replace(",", ""))
+    except ValueError:
+        await message.answer("Введите число. Попробуйте ещё раз:")
+        return
+    await state.update_data(fact_amount=fact_total)
+    data = await state.get_data()
+    plan_str = f"{int(data.get('amount', 0)):,}".replace(",", " ")
+    fact_str = f"{fact_total:,}".replace(",", " ")
+    await message.answer(
+        f"Озвучено: {plan_str} тг\n"
+        f"Факт: {fact_str} тг\n\n"
+        f"Выберите банк:",
         reply_markup=banks_kb()
     )
     await state.set_state(PaymentStates.choose_bank)
@@ -457,6 +534,7 @@ async def _add_service_to_list(message: Message, state: FSMContext, callback=Non
         "period": data.get("period", "Услуга"),
         "price": data.get("price", ""),
         "amount": data.get("amount", ""),
+        "fact_amount": data.get("fact_amount", ""),
     })
     await state.update_data(services_list=services, is_service=False)
 
@@ -526,6 +604,7 @@ async def save_payment(message: Message, state: FSMContext, bot: Bot, callback=N
             "period": data.get("period", ""),
             "price": data.get("price", ""),
             "amount": data.get("amount", ""),
+            "fact_amount": data.get("fact_amount", ""),
         })
 
     row_nums = []
@@ -541,6 +620,7 @@ async def save_payment(message: Message, state: FSMContext, bot: Bot, callback=N
                 "period": p.get("period", ""),
                 "price": p.get("price", ""),
                 "amount": p.get("amount", ""),
+                "fact_amount": p.get("fact_amount", ""),
                 "bank": bank,
                 "payment_date": payment_date,
                 "receipt_file_id": receipt_file_id,
@@ -561,6 +641,22 @@ async def save_payment(message: Message, state: FSMContext, bot: Bot, callback=N
             result_text = f"Оплата записана!\n{client} — {total_amount} тг"
         else:
             result_text = f"Записано {len(payments_to_save)} строк!\n{client} — {total_amount} тг"
+
+        # Мягкое предупреждение, если месяц вкладки не совпадает с месяцем
+        # фактической даты платежа: запись прошла, но сотрудник увидит флаг и
+        # сможет переписать строку, если ошибся вкладкой.
+        try:
+            pd = datetime.strptime(payment_date, "%d.%m.%Y").date() if payment_date else None
+        except ValueError:
+            pd = None
+        if pd and int(month) != pd.month:
+            tab_name = MONTH_SHEETS.get(int(month), str(month))
+            actual_name = MONTH_SHEETS.get(pd.month, str(pd.month))
+            result_text += (
+                f"\n\n⚠️ Внимание: записано на вкладку <b>{tab_name}</b>, "
+                f"но дата платежа — {payment_date} ({actual_name}).\n"
+                f"Если выбран не тот месяц, перенесите строку или сообщите бухгалтеру."
+            )
 
         # Уведомление через кассабот
         month_name = MONTH_SHEETS.get(month, "")
@@ -712,7 +808,7 @@ async def choose_service_category(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "back:month")
 async def back_to_month(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("Выберите месяц:", reply_markup=months_kb())
+    await callback.message.edit_text(MONTH_PROMPT, reply_markup=months_kb())
     await state.set_state(PaymentStates.choose_month)
 
 

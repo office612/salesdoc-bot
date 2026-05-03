@@ -14,6 +14,7 @@ class PaymentStates(StatesGroup):
     enter_payment_date = State()
     confirm_price = State()
     enter_price = State()
+    confirm_fact = State()
     enter_amount = State()
     choose_bank = State()
     enter_fact = State()

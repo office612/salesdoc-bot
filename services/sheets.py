@@ -153,16 +153,45 @@ async def add_payment(data: dict) -> int:
     col_a = ws.col_values(1)
     next_row = len(col_a) + 1
 
-    qty = int(data.get("qty", data.get("license_qty", 0)) or 0)
-    price = int(data.get("price", 0) or 0)
+    qty_raw = data.get("qty", data.get("license_qty", 0))
+    try:
+        qty = int(qty_raw) if qty_raw not in ("", None) else 0
+    except (ValueError, TypeError):
+        qty = 0
+
+    price_raw = data.get("price", "")
+    try:
+        price = int(price_raw) if price_raw not in ("", None) else 0
+    except (ValueError, TypeError):
+        price = 0
+
     period = data.get("period", data.get("tariff", ""))
     period_num = _period_to_num(period)
-    if period_num > 0:
+
+    # Если amount явно пустой (ручной ввод — оплата не по формуле, идёт в M),
+    # столбец J оставляем пустым, чтобы не путать формульную сумму с фактом.
+    explicit_amount_raw = data.get("amount", None)
+    explicit_amount_is_empty = explicit_amount_raw == ""
+    explicit_amount = None
+    try:
+        if explicit_amount_raw not in ("", None):
+            explicit_amount = int(explicit_amount_raw)
+    except (ValueError, TypeError):
+        explicit_amount = None
+
+    if explicit_amount_is_empty:
+        amount = ""  # ручной ввод → J пусто, фактический итог пишем в M
+    elif explicit_amount is not None and explicit_amount > 0:
+        amount = explicit_amount
+    elif period_num > 0:
         amount = int(qty * price * period_num)
     elif period_num == 0:
         amount = int(qty * price)
     else:
-        amount = int(data.get("amount", qty * price))
+        amount = int(qty * price)
+
+    # H (цена за лицензию) пустой строкой, если её явно не задавали
+    price_cell = price if price_raw not in ("", None) else ""
 
     fact = data.get("fact_amount", "")
     fact_val = int(fact) if fact not in ("", None) else ""
@@ -177,10 +206,10 @@ async def add_payment(data: dict) -> int:
         data.get("client", data.get("company", "")),       # B
         _match_ref_value(raw_article, "Статьи Доходов"),   # C
         data.get("license_type", data.get("license_type_raw", "")),  # D
-        qty,                                               # E
+        qty if qty_raw not in ("", None) else "",          # E
         _match_ref_value(raw_manager, "Менеджеры"),        # F
         period,                                            # G
-        price,                                             # H
+        price_cell,                                        # H
         period_num if period_num > 0 else "",              # I
         amount,                                            # J
         _match_ref_value(raw_bank, "Банки"),               # K

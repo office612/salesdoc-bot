@@ -82,6 +82,21 @@ def confirm_price_kb(new_total: int, old_total: int, new_unit: int = 0, old_unit
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+def fact_confirm_kb(plan_total: int) -> InlineKeyboardMarkup:
+    """Подтверждение фактического итога после ручного ввода цены за лицензию.
+
+    Если клиент заплатил по плану — M остаётся пустым, J = план.
+    Если иначе — открывается ввод фактической суммы (она пойдёт в M).
+    """
+    plan_str = f"{plan_total:,}".replace(",", " ")
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"✓ По плану — {plan_str} тг", callback_data="fact:plan")],
+        [InlineKeyboardButton(text="💰 Клиент заплатил иначе", callback_data="fact:other")],
+        [back_button("back:price")],
+        [InlineKeyboardButton(text="Отмена", callback_data="cancel")],
+    ])
+
+
 def banks_kb(back_to: str = "back:price") -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(text=b, callback_data=f'bank:{b}')]
@@ -107,13 +122,17 @@ def skip_receipt_kb() -> InlineKeyboardMarkup:
 
 
 def months_kb() -> InlineKeyboardMarkup:
+    # Подсвечиваем текущий месяц значком 📍, чтобы менеджер не попадал случайно
+    # на прошлую вкладку (например, не записывал майскую оплату на апрель).
+    tz = pytz.timezone(TIMEZONE)
+    current_month = datetime.now(tz).month
     items = list(MONTH_SHEETS.items())
     buttons = []
     for i in range(0, len(items), 3):
-        row = [
-            InlineKeyboardButton(text=name, callback_data=f'month:{num}')
-            for num, name in items[i:i+3]
-        ]
+        row = []
+        for num, name in items[i:i+3]:
+            label = f"📍 {name}" if num == current_month else name
+            row.append(InlineKeyboardButton(text=label, callback_data=f'month:{num}'))
         buttons.append(row)
     buttons.append([InlineKeyboardButton(text="Отмена", callback_data="cancel")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
