@@ -13,6 +13,7 @@ from keyboards.payment import (
     fact_confirm_kb,
 )
 from services.sheets import add_payment
+from services.salesdoc_sync import sync_payment_to_salesdoc
 from services.users import get_user_info, is_accountant, is_manager, fix_legacy_name
 from services.planted_store import save_messages
 from config import (
@@ -632,6 +633,12 @@ async def save_payment(message: Message, state: FSMContext, bot: Bot, callback=N
 
             row_num = await add_payment(row_data)
             row_nums.append(row_num)
+            # Параллельно шлём в SalesDoc dashboard — для автоматических карточек в Маршруте
+            # и автопродления подписки. Не блокирует основной поток если SalesDoc недоступен.
+            try:
+                sync_payment_to_salesdoc(row_data, row_num)
+            except Exception as _sync_err:
+                logger.warning(f"SalesDoc sync wrapper error: {_sync_err}")
             try:
                 total_amount += int(p.get("amount", 0) or 0)
             except (ValueError, TypeError):
