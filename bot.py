@@ -118,9 +118,17 @@ DOCS_DIR = Path(__file__).parent / "docs"
 
 async def _start_webapp_server():
     """Раздаёт статику из ./docs/ — для Telegram WebApp формы.
-    Railway передаёт PORT в env. Если не задан — берём 8080."""
+    Railway передаёт PORT в env. Если не задан — берём 8080.
+    Все ответы шлются с no-cache, иначе Telegram WebView держит старую
+    форму даже после обновления HTML на сервере."""
     port = int(os.getenv("PORT", "8080"))
     app = web.Application()
+
+    NO_CACHE_HEADERS = {
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    }
 
     async def index(request):
         return web.HTTPFound("/zvs.html")
@@ -128,9 +136,38 @@ async def _start_webapp_server():
     async def health(request):
         return web.Response(text="ok")
 
+    async def serve_file(filename: str):
+        """Отдать файл из docs/ с no-cache заголовками."""
+        path = DOCS_DIR / filename
+        if not path.exists() or not path.is_file():
+            return web.Response(status=404, text="Not found")
+        # Определяем content-type
+        if filename.endswith(".html"):
+            ct = "text/html; charset=utf-8"
+        elif filename.endswith(".png"):
+            ct = "image/png"
+        elif filename.endswith(".svg"):
+            ct = "image/svg+xml"
+        elif filename.endswith(".css"):
+            ct = "text/css"
+        elif filename.endswith(".js"):
+            ct = "application/javascript"
+        else:
+            ct = "application/octet-stream"
+        with open(path, "rb") as f:
+            data = f.read()
+        return web.Response(body=data, content_type=ct.split(";")[0], headers=NO_CACHE_HEADERS, charset="utf-8" if "charset" in ct else None)
+
+    async def handle_static(request):
+        filename = request.match_info["filename"]
+        # Безопасность: запрещаем `..` и слэши
+        if "/" in filename or ".." in filename or filename.startswith("."):
+            return web.Response(status=400, text="Bad path")
+        return await serve_file(filename)
+
     app.router.add_get("/", index)
     app.router.add_get("/health", health)
-    app.router.add_static("/", path=str(DOCS_DIR), show_index=False)
+    app.router.add_get("/{filename}", handle_static)
 
     runner = web.AppRunner(app)
     await runner.setup()
