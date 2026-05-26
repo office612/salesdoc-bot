@@ -29,9 +29,13 @@ router = Router()
 
 
 def _format_amount(amount) -> str:
+    """Робастно парсит число из чего угодно (с «тг», пробелами, запятыми)."""
+    import re
+    digits = re.sub(r"[^\d]", "", str(amount))
+    if not digits:
+        return str(amount)
     try:
-        n = int(str(amount).replace(" ", "").replace(",", ""))
-        return f"{n:,}".replace(",", " ")
+        return f"{int(digits):,}".replace(",", " ")
     except (ValueError, TypeError):
         return str(amount)
 

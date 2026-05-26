@@ -39,10 +39,15 @@ def _is_registered(uid: int) -> bool:
 
 
 def _format_amount(amount) -> str:
-    """50000 → '50 000'."""
+    """50000 → '50 000'. Робастно: парсит число даже если в строке есть «тг»,
+    пробелы, запятые — иначе при чтении из Sheets (которые форматируют
+    значения) получалось «5 000 тг тг»."""
+    import re
+    digits = re.sub(r"[^\d]", "", str(amount))
+    if not digits:
+        return str(amount)
     try:
-        n = int(str(amount).replace(" ", "").replace(",", ""))
-        return f"{n:,}".replace(",", " ")
+        return f"{int(digits):,}".replace(",", " ")
     except (ValueError, TypeError):
         return str(amount)
 
@@ -78,8 +83,7 @@ async def cmd_start(message: Message, state: FSMContext):
         user = get_user(uid) or {}
         name = user.get("name") or message.from_user.full_name
         await message.answer(
-            f"<b>{name}</b>, бот ЗВС готов к работе.\n\n"
-            f"Нажми «💸 Подать заявку» когда нужны деньги.",
+            f"Привет, <b>{name}</b>! Жми «💸 Подать заявку».",
             reply_markup=zvs_main_menu()
         )
         return
@@ -122,11 +126,7 @@ async def start_apply(message: Message, state: FSMContext):
         return
     await state.clear()
     await state.set_state(ZvsApply.waiting_amount)
-    await message.answer(
-        "💰 На какую сумму? (число в тенге)\n\n"
-        "Например: <code>50000</code>\n\n"
-        "Чтоб отменить — /cancel"
-    )
+    await message.answer("💰 Сумма?")
 
 
 @router.message(Command("cancel"))
@@ -145,42 +145,33 @@ async def step_amount(message: Message, state: FSMContext):
     try:
         amount = int(raw)
     except ValueError:
-        await message.answer(
-            "Не понял сумму. Введи число без букв.\n"
-            "Например: <code>50000</code>"
-        )
+        await message.answer("Только число. Например: 50000")
         return
     if amount <= 0:
         await message.answer("Сумма должна быть больше нуля.")
         return
     if amount > 100_000_000:
-        await message.answer("Сумма слишком большая. Проверь нолики.")
+        await message.answer("Слишком большая. Проверь нолики.")
         return
 
     await state.update_data(amount=amount)
     await state.set_state(ZvsApply.waiting_purpose)
-    await message.answer(
-        f"📝 На что нужны {_format_amount(amount)} тг?\n\n"
-        f"Опиши коротко (например: «Ремонт принтера в офисе»)"
-    )
+    await message.answer("📝 На что?")
 
 
 @router.message(ZvsApply.waiting_purpose)
 async def step_purpose(message: Message, state: FSMContext):
     purpose = (message.text or "").strip()
     if len(purpose) < 3:
-        await message.answer("Слишком коротко. Опиши хотя бы парой слов.")
+        await message.answer("Коротко напиши пару слов.")
         return
     if len(purpose) > 500:
-        await message.answer("Слишком длинно. Сократи до 500 символов.")
+        await message.answer("Слишком длинно (макс 500 символов).")
         return
 
     await state.update_data(purpose=purpose)
     await state.set_state(ZvsApply.waiting_account)
-    await message.answer(
-        "🏦 С какого счёта снять?",
-        reply_markup=accounts_kb()
-    )
+    await message.answer("🏦 Счёт:", reply_markup=accounts_kb())
 
 
 @router.callback_query(F.data.startswith("zvs_acc:"), ZvsApply.waiting_account)
@@ -198,11 +189,8 @@ async def step_account(callback: CallbackQuery, state: FSMContext):
     await state.set_state(ZvsApply.waiting_confirm)
 
     text = (
-        f"Проверь заявку:\n\n"
-        f"💰 <b>{_format_amount(data['amount'])} тг</b>\n"
-        f"📝 {data['purpose']}\n"
-        f"🏦 {account.capitalize()}\n\n"
-        f"Отправить директору?"
+        f"<b>{_format_amount(data['amount'])} тг</b> · {account.capitalize()}\n"
+        f"{data['purpose']}"
     )
     try:
         await callback.message.edit_text(text, reply_markup=confirm_apply_kb())
@@ -247,14 +235,10 @@ async def confirm_send(callback: CallbackQuery, state: FSMContext):
         await state.clear()
         return
 
-    # Подтверждение заявителю
+    # Подтверждение заявителю — коротко
     try:
         await callback.message.edit_text(
-            f"✅ Заявка №{zvs_id} отправлена директору.\n\n"
-            f"💰 {_format_amount(amount)} тг\n"
-            f"📝 {purpose}\n"
-            f"🏦 {account.capitalize()}\n\n"
-            f"Жди решение — придёт сюда."
+            f"✅ Заявка №{zvs_id} отправлена. Жди решение."
         )
     except Exception:
         pass
