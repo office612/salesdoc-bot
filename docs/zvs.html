@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Новая ЗВС</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--tg-theme-bg-color, #1e1e1e);
+      color: var(--tg-theme-text-color, #fff);
+      font-size: 16px;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 500px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    h1 {
+      font-size: 20px;
+      margin: 0 0 20px 0;
+      font-weight: 600;
+      color: var(--tg-theme-text-color, #fff);
+    }
+    .field {
+      margin-bottom: 20px;
+    }
+    .label {
+      display: block;
+      font-size: 13px;
+      color: var(--tg-theme-hint-color, #999);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .input, .textarea {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid var(--tg-theme-hint-color, #444);
+      border-radius: 10px;
+      background: var(--tg-theme-secondary-bg-color, #2a2a2a);
+      color: var(--tg-theme-text-color, #fff);
+      font-size: 16px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .input:focus, .textarea:focus {
+      border-color: var(--tg-theme-button-color, #3390ec);
+    }
+    .input.error, .textarea.error {
+      border-color: #e74c3c;
+    }
+    .textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+    .amount-wrap {
+      position: relative;
+    }
+    .amount-wrap .currency {
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--tg-theme-hint-color, #888);
+      font-size: 16px;
+      pointer-events: none;
+    }
+    .accounts {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .account-btn {
+      padding: 14px 8px;
+      border: 1px solid var(--tg-theme-hint-color, #444);
+      border-radius: 10px;
+      background: var(--tg-theme-secondary-bg-color, #2a2a2a);
+      color: var(--tg-theme-text-color, #fff);
+      font-size: 15px;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-align: center;
+    }
+    .account-btn.active {
+      background: var(--tg-theme-button-color, #3390ec);
+      color: var(--tg-theme-button-text-color, #fff);
+      border-color: var(--tg-theme-button-color, #3390ec);
+      font-weight: 600;
+    }
+    .hint {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color, #888);
+      margin-top: 6px;
+    }
+    .hint.error {
+      color: #e74c3c;
+    }
+    .preview {
+      margin-top: 24px;
+      padding: 16px;
+      background: var(--tg-theme-secondary-bg-color, #2a2a2a);
+      border-radius: 12px;
+      border: 1px solid var(--tg-theme-hint-color, #444);
+    }
+    .preview-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      font-size: 14px;
+    }
+    .preview-label {
+      color: var(--tg-theme-hint-color, #999);
+    }
+    .preview-value {
+      color: var(--tg-theme-text-color, #fff);
+      font-weight: 500;
+      text-align: right;
+      max-width: 60%;
+      word-break: break-word;
+    }
+    .preview-amount {
+      font-size: 18px;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>💸 Новая заявка на расход</h1>
+
+    <div class="field">
+      <label class="label" for="amount">Сумма</label>
+      <div class="amount-wrap">
+        <input
+          id="amount"
+          class="input"
+          type="number"
+          inputmode="numeric"
+          placeholder="50000"
+          min="1"
+          max="100000000"
+          autocomplete="off"
+        >
+        <span class="currency">тг</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="label" for="purpose">На что нужны деньги</label>
+      <textarea
+        id="purpose"
+        class="textarea"
+        placeholder="Ремонт принтера в офисе"
+        maxlength="500"
+      ></textarea>
+    </div>
+
+    <div class="field">
+      <label class="label">С какого счёта</label>
+      <div class="accounts">
+        <button type="button" class="account-btn" data-value="халык">Халык</button>
+        <button type="button" class="account-btn" data-value="каспи">Каспи</button>
+        <button type="button" class="account-btn" data-value="Наличка">Наличка</button>
+      </div>
+    </div>
+
+    <div class="preview" id="preview" style="display:none">
+      <div class="preview-row">
+        <span class="preview-label">Сумма</span>
+        <span class="preview-value preview-amount" id="prev-amount">—</span>
+      </div>
+      <div class="preview-row">
+        <span class="preview-label">Счёт</span>
+        <span class="preview-value" id="prev-account">—</span>
+      </div>
+      <div class="preview-row">
+        <span class="preview-label">На что</span>
+        <span class="preview-value" id="prev-purpose">—</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
+
+    const amountEl = document.getElementById('amount');
+    const purposeEl = document.getElementById('purpose');
+    const accountBtns = document.querySelectorAll('.account-btn');
+    const previewEl = document.getElementById('preview');
+    const prevAmount = document.getElementById('prev-amount');
+    const prevAccount = document.getElementById('prev-account');
+    const prevPurpose = document.getElementById('prev-purpose');
+
+    let selectedAccount = '';
+
+    // Выбор счёта
+    accountBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        accountBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        selectedAccount = btn.dataset.value;
+        updatePreview();
+        updateMainButton();
+      });
+    });
+
+    amountEl.addEventListener('input', () => { updatePreview(); updateMainButton(); });
+    purposeEl.addEventListener('input', () => { updatePreview(); updateMainButton(); });
+
+    function formatAmount(n) {
+      return new Intl.NumberFormat('ru-RU').format(n) + ' тг';
+    }
+
+    function updatePreview() {
+      const amount = parseInt(amountEl.value, 10);
+      const purpose = purposeEl.value.trim();
+      const account = selectedAccount;
+      if (amount > 0 || purpose || account) {
+        previewEl.style.display = '';
+        prevAmount.textContent = amount > 0 ? formatAmount(amount) : '—';
+        prevAccount.textContent = account ? account.charAt(0).toUpperCase() + account.slice(1) : '—';
+        prevPurpose.textContent = purpose || '—';
+      } else {
+        previewEl.style.display = 'none';
+      }
+    }
+
+    function isValid() {
+      const amount = parseInt(amountEl.value, 10);
+      const purpose = purposeEl.value.trim();
+      return amount > 0 && amount <= 100000000 && purpose.length >= 3 && selectedAccount !== '';
+    }
+
+    function updateMainButton() {
+      if (isValid()) {
+        tg.MainButton.setText('Отправить директору');
+        tg.MainButton.enable();
+        tg.MainButton.show();
+        tg.MainButton.color = tg.themeParams.button_color || '#3390ec';
+      } else {
+        tg.MainButton.setText('Заполни форму');
+        tg.MainButton.disable();
+        tg.MainButton.show();
+      }
+    }
+
+    tg.MainButton.onClick(() => {
+      if (!isValid()) return;
+      const payload = {
+        amount: parseInt(amountEl.value, 10),
+        purpose: purposeEl.value.trim(),
+        account: selectedAccount,
+      };
+      tg.sendData(JSON.stringify(payload));
+      tg.close();
+    });
+
+    updateMainButton();
+  </script>
+</body>
+</html>

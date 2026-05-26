@@ -10,6 +10,7 @@
 кнопки одобрения и их callbacks обрабатывает handlers/zvs_director.py.
 """
 
+import json
 import logging
 import os
 import asyncio
@@ -115,7 +116,74 @@ async def cmd_start(message: Message, state: FSMContext):
 
 
 # ────────────────────────────────────────────────────────────
-# Подача заявки — FSM
+# Подача заявки через Telegram WebApp (форма)
+# ────────────────────────────────────────────────────────────
+
+@router.message(F.web_app_data)
+async def handle_web_app_form(message: Message, state: FSMContext):
+    """Юзер заполнил форму в WebApp и нажал «Отправить директору».
+    Tg-клиент шлёт нам сообщение с message.web_app_data.data — JSON."""
+    if not _is_registered(message.from_user.id):
+        await message.answer("🚫 Нет доступа. Сначала /start")
+        return
+    await state.clear()
+
+    raw = message.web_app_data.data
+    try:
+        data = json.loads(raw)
+        amount = int(data.get("amount", 0))
+        purpose = str(data.get("purpose", "")).strip()
+        account = str(data.get("account", "")).strip()
+    except (ValueError, json.JSONDecodeError):
+        await message.answer("Не получилось прочитать форму. Попробуй ещё раз.")
+        return
+
+    # Валидация
+    if amount <= 0 or amount > 100_000_000:
+        await message.answer("Сумма некорректная. Открой форму заново.")
+        return
+    if len(purpose) < 3 or len(purpose) > 500:
+        await message.answer("Описание слишком короткое или слишком длинное.")
+        return
+    if account not in BANKS:
+        await message.answer("Неизвестный счёт. Открой форму заново.")
+        return
+
+    uid = message.from_user.id
+    user = await asyncio.to_thread(get_user, uid)
+    name = (user or {}).get("name") or message.from_user.full_name
+
+    zvs_id = await asyncio.to_thread(create_request, uid, name, amount, purpose, account)
+    if not zvs_id:
+        await message.answer("❌ Не получилось создать заявку, попробуй ещё раз чуть позже.")
+        return
+
+    await message.answer(
+        f"✅ Заявка №{zvs_id} отправлена.\n"
+        f"<b>{_format_amount(amount)} тг</b> · {account.capitalize()}\n"
+        f"{purpose}",
+        reply_markup=zvs_main_menu(),
+    )
+
+    # Уведомление директору
+    username = f"@{message.from_user.username}" if message.from_user.username else "—"
+    try:
+        director_bot = await _get_director_bot()
+        await director_bot.send_message(
+            DIRECTOR_ID,
+            f"💸 <b>Новая ЗВС №{zvs_id}</b>\n\n"
+            f"👤 {name} ({username})\n"
+            f"💰 <b>{_format_amount(amount)} тг</b>\n"
+            f"📝 {purpose}\n"
+            f"🏦 {account.capitalize()}",
+            reply_markup=director_decision_kb(zvs_id, uid),
+        )
+    except Exception as e:
+        logger.error(f"notify director (webapp): {e}")
+
+
+# ────────────────────────────────────────────────────────────
+# Подача заявки — FSM (fallback если WebApp недоступен)
 # ────────────────────────────────────────────────────────────
 
 @router.message(Command("zayavka"))

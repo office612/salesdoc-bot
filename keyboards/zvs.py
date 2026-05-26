@@ -1,17 +1,27 @@
 """Клавиатуры для ЗВС-бота."""
 
+import os
 from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton,
     ReplyKeyboardMarkup, KeyboardButton,
+    WebAppInfo,
 )
 from config import BANKS
 
 
 def zvs_main_menu() -> ReplyKeyboardMarkup:
-    """Главное меню заявителя."""
+    """Главное меню заявителя. Если задан ZVS_WEBAPP_URL — кнопка открывает форму."""
+    webapp_url = os.getenv("ZVS_WEBAPP_URL", "").strip()
+    if webapp_url:
+        apply_btn = KeyboardButton(
+            text="💸 Подать заявку",
+            web_app=WebAppInfo(url=webapp_url),
+        )
+    else:
+        apply_btn = KeyboardButton(text="💸 Подать заявку")
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="💸 Подать заявку")],
+            [apply_btn],
             [KeyboardButton(text="📋 Мои заявки")],
         ],
         resize_keyboard=True,
