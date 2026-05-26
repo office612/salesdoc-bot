@@ -309,7 +309,8 @@ def get_request(zvs_id: int) -> Optional[Dict]:
 
 
 def update_decision(zvs_id: int, status: str, comment: str = "") -> bool:
-    """Обновить статус заявки."""
+    """Обновить статус заявки. Все обновления одним batch-запросом —
+    в 3 раза быстрее чем 3 отдельных update_cell."""
     loc = _find_location(zvs_id)
     if not loc:
         logger.warning(f"update_decision: заявка #{zvs_id} не найдена")
@@ -317,15 +318,44 @@ def update_decision(zvs_id: int, status: str, comment: str = "") -> bool:
     week_label, row_num = loc
     try:
         ws = _ss().worksheet(week_label)
-        ws.update_cell(row_num, COL_STATUS, status)
-        ws.update_cell(row_num, COL_DECIDED, _now_str())
-        if comment:
-            ws.update_cell(row_num, COL_COMMENT, comment)
+        # Один range update H:J (статус, решено, комментарий) — 1 API call вместо 3
+        ws.update(
+            f"H{row_num}:J{row_num}",
+            [[status, _now_str(), comment]],
+            value_input_option="USER_ENTERED",
+        )
         logger.info(f"ZVS #{zvs_id} → {status} | лист {week_label}")
         return True
     except Exception as e:
         logger.error(f"update_decision {zvs_id}: {e}", exc_info=True)
         return False
+
+
+def warm_location_cache():
+    """Прогреть _location_cache из всех weekly листов — один проход при старте.
+    После этого _find_location всегда попадает в кеш, не делая Sheets-поиск."""
+    try:
+        ss = _ss()
+        count = 0
+        for ws in ss.worksheets():
+            if ws.title in (META_SHEET_NAME, SUMMARY_SHEET_NAME, MSG_IDS_SHEET_NAME):
+                continue
+            try:
+                ids = ws.col_values(1)
+                for i, v in enumerate(ids):
+                    if i == 0:
+                        continue  # шапка
+                    try:
+                        zvs_id = int(str(v).strip())
+                        _location_cache[zvs_id] = (ws.title, i + 1)
+                        count += 1
+                    except (ValueError, TypeError):
+                        continue
+            except Exception:
+                continue
+        logger.info(f"Кеш location прогрет: {count} заявок")
+    except Exception as e:
+        logger.error(f"warm_location_cache: {e}")
 
 
 def get_user_requests(telegram_id: int, limit: int = 10) -> List[Dict]:
@@ -692,8 +722,8 @@ def _cleanup_obsolete_sheets():
 
 
 def init_zvs_storage():
-    """Создать _meta + текущий недельный лист + Итоги. Чистка мусора.
-    Вызывается один раз при старте."""
+    """Создать _meta + текущий недельный лист + Итоги. Чистка мусора +
+    прогрев кэшей. Вызывается один раз при старте."""
     # Сначала создаём что нужно — потом удаляем старое (Sheets не даёт
     # удалить последний оставшийся лист)
     _get_meta_sheet()
@@ -703,3 +733,5 @@ def init_zvs_storage():
     except Exception as e:
         logger.error(f"init refresh summary: {e}")
     _cleanup_obsolete_sheets()
+    # Прогрев кэшей — чтоб одобрение/отклонение не тормозило после рестарта
+    warm_location_cache()

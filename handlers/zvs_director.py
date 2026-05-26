@@ -289,54 +289,55 @@ async def _finalize_decision(
         f"{tail}"
     )
 
-    # event может быть CallbackQuery (одобрение в 1 нажатие) или Message (ввод причины)
-    director_bot = event.bot
-    if hasattr(event, "message"):
-        # CallbackQuery — редактируем оригинал
-        try:
-            await event.message.edit_text(director_text, reply_markup=None)
-        except Exception:
-            try:
-                await director_bot.send_message(DIRECTOR_ID, director_text)
-            except Exception:
-                pass
-    else:
-        # Message — шлём новое сообщение в чат директора
-        try:
-            await director_bot.send_message(DIRECTOR_ID, director_text)
-        except Exception:
-            pass
-
-    # Уведомление заявителю — РЕДАКТИРУЕМ исходное сообщение «⏳ Заявка №X»
-    # вместо отправки нового. Если id потерян (рестарт бота) — fallback на новое.
     applicant_text = (
         f"{emoji} <b>Заявка №{zvs_id} — {status.lower()}</b>\n"
         f"{amount} тг · {account}\n"
         f"{purpose}"
         f"{tail}"
     )
+
+    # event может быть CallbackQuery (одобрение в 1 нажатие) или Message (ввод причины)
+    director_bot = event.bot
     applicant_bot = await _get_applicant_bot()
-    loc = await asyncio.to_thread(get_applicant_msg, zvs_id)
-    logger.info(f"[finalize] zvs_id={zvs_id} loc={loc}")
-    edited = False
-    if loc:
-        chat_id, message_id = loc
+
+    async def update_director_msg():
+        if hasattr(event, "message"):
+            try:
+                await event.message.edit_text(director_text, reply_markup=None)
+                return
+            except Exception:
+                pass
         try:
-            await applicant_bot.edit_message_text(
-                applicant_text,
-                chat_id=chat_id,
-                message_id=message_id,
-            )
-            edited = True
-            logger.info(f"[finalize] edited applicant msg #{zvs_id} OK")
-        except Exception as e:
-            logger.warning(f"[finalize] edit applicant msg #{zvs_id} FAILED: {type(e).__name__}: {e}")
-    if not edited:
+            await director_bot.send_message(DIRECTOR_ID, director_text)
+        except Exception:
+            pass
+
+    async def update_applicant_msg():
+        loc = await asyncio.to_thread(get_applicant_msg, zvs_id)
+        logger.info(f"[finalize] zvs_id={zvs_id} loc={loc}")
+        if loc:
+            chat_id, message_id = loc
+            try:
+                await applicant_bot.edit_message_text(
+                    applicant_text,
+                    chat_id=chat_id,
+                    message_id=message_id,
+                )
+                logger.info(f"[finalize] edited applicant msg #{zvs_id} OK")
+                return
+            except Exception as e:
+                logger.warning(f"[finalize] edit applicant msg #{zvs_id} FAILED: {type(e).__name__}: {e}")
         try:
             await applicant_bot.send_message(applicant_uid, applicant_text)
             logger.info(f"[finalize] sent NEW msg to applicant #{zvs_id} (fallback)")
         except Exception as e:
             logger.error(f"notify applicant {applicant_uid}: {e}")
+
+    # Обе операции параллельно — экономит ~500мс
+    await asyncio.gather(
+        update_director_msg(),
+        update_applicant_msg(),
+    )
 
 
 # ────────────────────────────────────────────────────────────
