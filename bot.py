@@ -9,11 +9,22 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import CallbackQuery
 
-from config import BOT_TOKEN
+from config import BOT_TOKEN, DIRECTOR_ID, ACCOUNTANT_IDS
 from handlers import start, payment, reports, subscription
 
-from services.sheets import mark_planted
+from services.sheets import mark_planted, get_user
 from services.planted_store import get_messages
+
+
+def _has_kassa_access(uid: int) -> bool:
+    """Доступ к кнопкам в @SDfinansbot. Whitelist по ID + по users sheet."""
+    if uid == DIRECTOR_ID:
+        return True
+    if uid in ACCOUNTANT_IDS:
+        return True
+    if get_user(uid):
+        return True
+    return False
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,6 +41,9 @@ kassa_router = Router()
 
 @kassa_router.callback_query(F.data.startswith("planted:"))
 async def planted_handler(callback: CallbackQuery):
+    if not _has_kassa_access(callback.from_user.id):
+        await callback.answer("🚫 Нет доступа", show_alert=True)
+        return
     parts = callback.data.split(":")
     if len(parts) != 3:
         await callback.answer("Неверные данные", show_alert=True)
