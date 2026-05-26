@@ -621,13 +621,34 @@ def _refresh_summary(ss, week_label: str):
 # Инициализация при старте бота
 # ────────────────────────────────────────────────────────────
 
+_OBSOLETE_SHEET_NAMES = {"Лист1", "Sheet1", "requests"}
+
+
+def _cleanup_obsolete_sheets():
+    """Один раз при старте — удаляем мусорные листы старых версий."""
+    ss = _ss()
+    requests = []
+    for ws in ss.worksheets():
+        if ws.title in _OBSOLETE_SHEET_NAMES:
+            requests.append({"deleteSheet": {"sheetId": ws.id}})
+    if requests:
+        try:
+            ss.batch_update({"requests": requests})
+            logger.info(f"Удалено {len(requests)} устаревших листов")
+        except Exception as e:
+            # Sheets не даёт удалить ПОСЛЕДНИЙ лист — пропускаем тихо
+            logger.warning(f"Не удалось удалить старые листы: {e}")
+
+
 def init_zvs_storage():
-    """Создать _meta + текущий недельный лист + Итоги. Вызывается один раз при старте."""
+    """Создать _meta + текущий недельный лист + Итоги. Чистка мусора.
+    Вызывается один раз при старте."""
+    # Сначала создаём что нужно — потом удаляем старое (Sheets не даёт
+    # удалить последний оставшийся лист)
     _get_meta_sheet()
     ws = get_current_week_sheet()
-    # _refresh_summary вызывается из get_week_sheet при создании; если лист уже был —
-    # всё равно перепишем сводку, чтоб ссылалась на правильный лист
     try:
         _refresh_summary(_ss(), ws.title)
     except Exception as e:
         logger.error(f"init refresh summary: {e}")
+    _cleanup_obsolete_sheets()
