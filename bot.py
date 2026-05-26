@@ -155,6 +155,13 @@ async def main():
         zvs_dp = Dispatcher(storage=MemoryStorage())
         zvs_dp.include_router(zvs_handlers.router)
         await zvs_bot.delete_webhook(drop_pending_updates=True)
+        # Инициализируем таблицу заранее — чтоб директор видел листы до первой заявки
+        try:
+            from services.zvs_sheets import get_zvs_sheet
+            await asyncio.to_thread(get_zvs_sheet)
+            logger.info("ЗВС таблица инициализирована (листы requests + Итоги)")
+        except Exception as e:
+            logger.error(f"Не удалось инициализировать ЗВС таблицу: {e}")
         logger.info("ЗВС-бот запущен")
     else:
         logger.warning("ZVS_BOT_TOKEN не задан — ЗВС-бот не запущен")
