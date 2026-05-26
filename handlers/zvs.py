@@ -159,11 +159,13 @@ async def handle_web_app_form(message: Message, state: FSMContext):
         await message.answer("❌ Не получилось создать заявку, попробуй ещё раз чуть позже.")
         return
 
+    # БЕЗ reply_markup — иначе Telegram не даст редактировать это сообщение
+    # при одобрении («message can't be edited»). Клавиатура is_persistent=True
+    # и так висит снизу.
     sent = await message.answer(
         f"⏳ <b>Заявка №{zvs_id}</b>\n"
         f"{_format_amount(amount)} тг · {account.capitalize()}\n"
         f"{purpose}",
-        reply_markup=zvs_main_menu(),
     )
     # Запоминаем — чтоб при одобрении/отклонении ОТРЕДАКТИРОВАТЬ это сообщение,
     # а не слать новое. Под try — Sheets иногда падает, это не должно
