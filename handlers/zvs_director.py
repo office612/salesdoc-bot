@@ -8,6 +8,7 @@
 Уведомления заявителю шлются через applicant_bot (отдельный бот сотрудников).
 """
 
+import asyncio
 import logging
 import os
 from aiogram import Router, F, Bot
@@ -35,10 +36,20 @@ def _format_amount(amount) -> str:
         return str(amount)
 
 
-async def _open_applicant_bot() -> Bot:
-    """Создать клиент к боту сотрудников (для отправки им ответов)."""
-    token = os.getenv("ZVS_BOT_TOKEN", "")
-    return Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+_applicant_bot_cache: Bot | None = None
+
+
+async def _get_applicant_bot() -> Bot:
+    """Кэшированный клиент к боту сотрудников. Один на жизнь процесса —
+    SSL handshake не повторяется при каждом одобрении."""
+    global _applicant_bot_cache
+    if _applicant_bot_cache is None or _applicant_bot_cache.session.closed:
+        token = os.getenv("ZVS_BOT_TOKEN", "")
+        _applicant_bot_cache = Bot(
+            token=token,
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        )
+    return _applicant_bot_cache
 
 
 # ────────────────────────────────────────────────────────────
@@ -85,46 +96,44 @@ async def handle_register(callback: CallbackQuery):
         await callback.answer("Битый ID", show_alert=True)
         return
 
+    # Сразу ack
+    await callback.answer("Готово" if action == "ok" else "Отказано")
+
     pending = pending_get(tg_id) or {}
     name = pending.get("name") or "Сотрудник"
+    applicant_bot = await _get_applicant_bot()
 
-    applicant_bot = await _open_applicant_bot()
-    try:
-        if action == "ok":
-            register_user(tg_id, name, "employee")
-            pending_remove(tg_id)
-            try:
-                await callback.message.edit_text(
-                    callback.message.text + "\n\n✅ <b>Доступ открыт</b>"
-                )
-            except Exception:
-                pass
-            try:
-                await applicant_bot.send_message(
-                    tg_id,
-                    "✅ Доступ к ЗВС-боту открыт!\n\nНажми /start чтобы начать."
-                )
-            except Exception as e:
-                logger.warning(f"notify employee approved: {e}")
-            await callback.answer("Готово")
-        else:
-            pending_remove(tg_id)
-            try:
-                await callback.message.edit_text(
-                    callback.message.text + "\n\n❌ <b>Отказано</b>"
-                )
-            except Exception:
-                pass
-            try:
-                await applicant_bot.send_message(
-                    tg_id,
-                    "❌ В доступе отказано. Если ошибка — пиши директору лично."
-                )
-            except Exception:
-                pass
-            await callback.answer("Отказано")
-    finally:
-        await applicant_bot.session.close()
+    if action == "ok":
+        await asyncio.to_thread(register_user, tg_id, name, "employee")
+        pending_remove(tg_id)
+        try:
+            await callback.message.edit_text(
+                callback.message.text + "\n\n✅ <b>Доступ открыт</b>"
+            )
+        except Exception:
+            pass
+        try:
+            await applicant_bot.send_message(
+                tg_id,
+                "✅ Доступ к ЗВС-боту открыт!\n\nНажми /start чтобы начать."
+            )
+        except Exception as e:
+            logger.warning(f"notify employee approved: {e}")
+    else:
+        pending_remove(tg_id)
+        try:
+            await callback.message.edit_text(
+                callback.message.text + "\n\n❌ <b>Отказано</b>"
+            )
+        except Exception:
+            pass
+        try:
+            await applicant_bot.send_message(
+                tg_id,
+                "❌ В доступе отказано. Если ошибка — пиши директору лично."
+            )
+        except Exception:
+            pass
 
 
 # ────────────────────────────────────────────────────────────
@@ -149,22 +158,25 @@ async def director_decision(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Битые данные", show_alert=True)
         return
 
-    req = get_request(zvs_id)
+    # Сразу ack — остальная работа в фоне
+    await callback.answer("Обрабатываю…" if action == "ap" else "")
+
+    req = await asyncio.to_thread(get_request, zvs_id)
     if not req:
-        await callback.answer("Заявка не найдена", show_alert=True)
+        await callback.message.answer(f"⚠️ Заявка №{zvs_id} не найдена в таблице.")
         return
 
     if req.get("status") and req["status"] != "Ожидает":
-        await callback.answer(
-            f"Уже {req['status'].lower()} ({req.get('decided_at', '')})",
-            show_alert=True
+        await callback.message.answer(
+            f"⚠️ Заявка №{zvs_id} уже {req['status'].lower()} "
+            f"({req.get('decided_at', '')})"
         )
         return
 
     if action == "ap":
-        ok = update_decision(zvs_id, "Одобрено")
+        ok = await asyncio.to_thread(update_decision, zvs_id, "Одобрено", "")
         if not ok:
-            await callback.answer("Не удалось записать в Sheets", show_alert=True)
+            await callback.message.answer("❌ Не удалось записать в Sheets, попробуй ещё раз")
             return
         await _finalize_decision(callback, zvs_id, applicant_uid, "Одобрено", req, "")
         return
@@ -189,7 +201,6 @@ async def director_decision(callback: CallbackQuery, state: FSMContext):
             f"Напиши что поправить (заявитель увидит).\n"
             f"Чтоб не возвращать — /cancel"
         )
-    await callback.answer()
 
 
 @router.message(ZvsDecision.waiting_reject_reason)
@@ -208,12 +219,12 @@ async def reject_reason(message: Message, state: FSMContext):
     data = await state.get_data()
     zvs_id = data.get("zvs_id")
     applicant_uid = data.get("applicant_uid")
-    ok = update_decision(zvs_id, "Отклонено", text)
+    ok = await asyncio.to_thread(update_decision, zvs_id, "Отклонено", text)
     if not ok:
         await message.answer("❌ Не удалось записать. Попробуй позже.")
         await state.clear()
         return
-    req = get_request(zvs_id) or {}
+    req = await asyncio.to_thread(get_request, zvs_id) or {}
     await _finalize_decision(message, zvs_id, applicant_uid, "Отклонено", req, text)
     await state.clear()
 
@@ -234,12 +245,12 @@ async def rework_comment(message: Message, state: FSMContext):
     data = await state.get_data()
     zvs_id = data.get("zvs_id")
     applicant_uid = data.get("applicant_uid")
-    ok = update_decision(zvs_id, "На доработку", text)
+    ok = await asyncio.to_thread(update_decision, zvs_id, "На доработку", text)
     if not ok:
         await message.answer("❌ Не удалось записать. Попробуй позже.")
         await state.clear()
         return
-    req = get_request(zvs_id) or {}
+    req = await asyncio.to_thread(get_request, zvs_id) or {}
     await _finalize_decision(message, zvs_id, applicant_uid, "На доработку", req, text)
     await state.clear()
 
@@ -291,7 +302,7 @@ async def _finalize_decision(
         except Exception:
             pass
 
-    # Уведомление заявителю — через бот сотрудников
+    # Уведомление заявителю — через бот сотрудников (кэшированный)
     applicant_text = (
         f"{emoji} <b>Заявка №{zvs_id} — {status.lower()}</b>\n\n"
         f"💰 {amount} тг\n"
@@ -299,13 +310,11 @@ async def _finalize_decision(
         f"🏦 {account}"
         f"{tail}"
     )
-    applicant_bot = await _open_applicant_bot()
     try:
+        applicant_bot = await _get_applicant_bot()
         await applicant_bot.send_message(applicant_uid, applicant_text)
     except Exception as e:
         logger.error(f"notify applicant {applicant_uid}: {e}")
-    finally:
-        await applicant_bot.session.close()
 
 
 # ────────────────────────────────────────────────────────────

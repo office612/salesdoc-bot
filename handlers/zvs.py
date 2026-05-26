@@ -47,12 +47,22 @@ def _format_amount(amount) -> str:
         return str(amount)
 
 
-async def _open_director_bot() -> Bot:
-    """Создать клиент к директорскому боту (для отправки ему уведомлений)."""
-    token = os.getenv("ZVS_DIR_BOT_TOKEN", "")
-    if not token:
-        raise RuntimeError("ZVS_DIR_BOT_TOKEN не задан — некуда слать заявки")
-    return Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+_director_bot_cache: Bot | None = None
+
+
+async def _get_director_bot() -> Bot:
+    """Кэшированный клиент к директорскому боту. Создаётся один раз —
+    переиспользуем session, SSL handshake не повторяется."""
+    global _director_bot_cache
+    if _director_bot_cache is None or _director_bot_cache.session.closed:
+        token = os.getenv("ZVS_DIR_BOT_TOKEN", "")
+        if not token:
+            raise RuntimeError("ZVS_DIR_BOT_TOKEN не задан — некуда слать заявки")
+        _director_bot_cache = Bot(
+            token=token,
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        )
+    return _director_bot_cache
 
 
 # ────────────────────────────────────────────────────────────
@@ -86,9 +96,8 @@ async def cmd_start(message: Message, state: FSMContext):
         "Запрос отправлен директору. Дождись одобрения и нажми /start ещё раз."
     )
 
-    director_bot = None
     try:
-        director_bot = await _open_director_bot()
+        director_bot = await _get_director_bot()
         await director_bot.send_message(
             DIRECTOR_ID,
             f"🔔 <b>Запрос доступа к ЗВС-боту</b>\n\n"
@@ -99,9 +108,6 @@ async def cmd_start(message: Message, state: FSMContext):
         )
     except Exception as e:
         logger.warning(f"notify director on register: {e}")
-    finally:
-        if director_bot:
-            await director_bot.session.close()
 
 
 # ────────────────────────────────────────────────────────────
@@ -179,6 +185,9 @@ async def step_purpose(message: Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith("zvs_acc:"), ZvsApply.waiting_account)
 async def step_account(callback: CallbackQuery, state: FSMContext):
+    # Сразу ack — иначе у юзера крутится спинер до конца обработки
+    await callback.answer()
+
     account = callback.data.split(":", 1)[1]
     if account not in BANKS:
         await callback.answer("Битый счёт", show_alert=True)
@@ -199,37 +208,42 @@ async def step_account(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text(text, reply_markup=confirm_apply_kb())
     except Exception:
         await callback.message.answer(text, reply_markup=confirm_apply_kb())
-    await callback.answer()
 
 
 @router.callback_query(F.data == "zvs_apply:cancel", ZvsApply.waiting_confirm)
 async def confirm_cancel(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
     await state.clear()
     try:
         await callback.message.edit_text("Отменено. Заявка не отправлена.")
     except Exception:
         pass
-    await callback.answer()
 
 
 @router.callback_query(F.data == "zvs_apply:send", ZvsApply.waiting_confirm)
 async def confirm_send(callback: CallbackQuery, state: FSMContext):
+    # Сразу ack — чтоб у юзера спинер не висел пока мы пишем в Sheets
+    await callback.answer("Отправляю…")
+
     data = await state.get_data()
     amount = data.get("amount")
     purpose = data.get("purpose", "")
     account = data.get("account", "")
     uid = callback.from_user.id
 
-    user = get_user(uid) or {}
+    user = await asyncio.to_thread(get_user, uid)
+    user = user or {}
     name = user.get("name") or callback.from_user.full_name
 
-    zvs_id = create_request(uid, name, amount, purpose, account)
+    # Создание заявки в Sheets — в отдельном потоке (не блокируем event loop)
+    zvs_id = await asyncio.to_thread(
+        create_request, uid, name, amount, purpose, account
+    )
     if not zvs_id:
         await callback.message.edit_text(
             "❌ Не получилось создать заявку (проблема с таблицей). "
             "Попробуй ещё раз чуть позже или напиши директору."
         )
-        await callback.answer()
         await state.clear()
         return
 
@@ -245,11 +259,10 @@ async def confirm_send(callback: CallbackQuery, state: FSMContext):
     except Exception:
         pass
 
-    # Уведомление директору — через ОТДЕЛЬНЫЙ директорский бот
+    # Уведомление директору — через ОТДЕЛЬНЫЙ директорский бот (кэшированный)
     username = f"@{callback.from_user.username}" if callback.from_user.username else "—"
-    director_bot = None
     try:
-        director_bot = await _open_director_bot()
+        director_bot = await _get_director_bot()
         await director_bot.send_message(
             DIRECTOR_ID,
             f"💸 <b>Новая ЗВС №{zvs_id}</b>\n\n"
@@ -261,11 +274,7 @@ async def confirm_send(callback: CallbackQuery, state: FSMContext):
         )
     except Exception as e:
         logger.error(f"notify director about new zvs: {e}")
-    finally:
-        if director_bot:
-            await director_bot.session.close()
 
-    await callback.answer("Отправлено")
     await state.clear()
 
 
@@ -280,7 +289,7 @@ async def my_history(message: Message):
     if not _is_registered(uid):
         await message.answer("🚫 Нет доступа. Сначала /start")
         return
-    reqs = get_user_requests(uid, limit=10)
+    reqs = await asyncio.to_thread(get_user_requests, uid, 10)
     if not reqs:
         await message.answer("У тебя пока нет заявок.")
         return

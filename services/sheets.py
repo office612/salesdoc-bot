@@ -77,14 +77,24 @@ COL_ACT_PRICE = 21 # V
 COL_STATUS = 22    # W
 
 
+_gspread_client_cache = None
+
+
 def get_client() -> gspread.Client:
+    """Возвращает gspread клиент. Кэшируется на жизнь процесса —
+    повторная авторизация HTTP+SSL handshake занимает ~1-2 сек, а это
+    делалось при каждом запросе. Теперь — один раз."""
+    global _gspread_client_cache
+    if _gspread_client_cache is not None:
+        return _gspread_client_cache
     google_creds_json = os.getenv("GOOGLE_CREDENTIALS")
     if google_creds_json:
         creds_dict = json.loads(google_creds_json)
         creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     else:
         creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
-    return gspread.authorize(creds)
+    _gspread_client_cache = gspread.authorize(creds)
+    return _gspread_client_cache
 
 
 def get_spreadsheet():
