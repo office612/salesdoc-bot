@@ -30,6 +30,7 @@ from config import BANKS, DIRECTOR_ID
 from services.sheets import get_user
 from services.zvs_sheets import create_request, get_user_requests
 from services.zvs_pending import add as pending_add
+from services.zvs_messages import save as save_applicant_msg
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -158,12 +159,15 @@ async def handle_web_app_form(message: Message, state: FSMContext):
         await message.answer("❌ Не получилось создать заявку, попробуй ещё раз чуть позже.")
         return
 
-    await message.answer(
-        f"✅ Заявка №{zvs_id} отправлена.\n"
-        f"<b>{_format_amount(amount)} тг</b> · {account.capitalize()}\n"
+    sent = await message.answer(
+        f"⏳ <b>Заявка №{zvs_id}</b>\n"
+        f"{_format_amount(amount)} тг · {account.capitalize()}\n"
         f"{purpose}",
         reply_markup=zvs_main_menu(),
     )
+    # Запоминаем — чтоб при одобрении/отклонении ОТРЕДАКТИРОВАТЬ это сообщение,
+    # а не слать новое
+    save_applicant_msg(zvs_id, sent.chat.id, sent.message_id)
 
     # Уведомление директору
     username = f"@{message.from_user.username}" if message.from_user.username else "—"
@@ -303,11 +307,15 @@ async def confirm_send(callback: CallbackQuery, state: FSMContext):
         await state.clear()
         return
 
-    # Подтверждение заявителю — коротко
+    # Подтверждение заявителю — редактируем сообщение и запоминаем его id,
+    # чтоб директор при одобрении тут же поменял статус (а не слал новое)
     try:
         await callback.message.edit_text(
-            f"✅ Заявка №{zvs_id} отправлена. Жди решение."
+            f"⏳ <b>Заявка №{zvs_id}</b>\n"
+            f"{_format_amount(amount)} тг · {account.capitalize()}\n"
+            f"{purpose}"
         )
+        save_applicant_msg(zvs_id, callback.message.chat.id, callback.message.message_id)
     except Exception:
         pass
 

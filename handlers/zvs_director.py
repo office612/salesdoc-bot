@@ -22,6 +22,7 @@ from states.zvs import ZvsDecision
 from services.sheets import get_user, register_user
 from services.zvs_sheets import get_request, update_decision
 from services.zvs_pending import get as pending_get, remove as pending_remove
+from services.zvs_messages import get as get_applicant_msg
 from config import DIRECTOR_ID
 
 logger = logging.getLogger(__name__)
@@ -306,19 +307,33 @@ async def _finalize_decision(
         except Exception:
             pass
 
-    # Уведомление заявителю — через бот сотрудников (кэшированный)
+    # Уведомление заявителю — РЕДАКТИРУЕМ исходное сообщение «⏳ Заявка №X»
+    # вместо отправки нового. Если id потерян (рестарт бота) — fallback на новое.
     applicant_text = (
-        f"{emoji} <b>Заявка №{zvs_id} — {status.lower()}</b>\n\n"
-        f"💰 {amount} тг\n"
-        f"📝 {purpose}\n"
-        f"🏦 {account}"
+        f"{emoji} <b>Заявка №{zvs_id} — {status.lower()}</b>\n"
+        f"{amount} тг · {account}\n"
+        f"{purpose}"
         f"{tail}"
     )
-    try:
-        applicant_bot = await _get_applicant_bot()
-        await applicant_bot.send_message(applicant_uid, applicant_text)
-    except Exception as e:
-        logger.error(f"notify applicant {applicant_uid}: {e}")
+    applicant_bot = await _get_applicant_bot()
+    loc = get_applicant_msg(zvs_id)
+    edited = False
+    if loc:
+        chat_id, message_id = loc
+        try:
+            await applicant_bot.edit_message_text(
+                applicant_text,
+                chat_id=chat_id,
+                message_id=message_id,
+            )
+            edited = True
+        except Exception as e:
+            logger.warning(f"edit applicant msg failed, fallback to send: {e}")
+    if not edited:
+        try:
+            await applicant_bot.send_message(applicant_uid, applicant_text)
+        except Exception as e:
+            logger.error(f"notify applicant {applicant_uid}: {e}")
 
 
 # ────────────────────────────────────────────────────────────
