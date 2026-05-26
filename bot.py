@@ -11,6 +11,7 @@ from aiogram.types import CallbackQuery
 
 from config import BOT_TOKEN, DIRECTOR_ID, ACCOUNTANT_IDS
 from handlers import start, payment, reports, subscription
+from handlers import zvs as zvs_handlers
 
 from services.sheets import mark_planted, get_user
 from services.planted_store import get_messages
@@ -127,7 +128,8 @@ async def main():
 
     # ── Бот кассы @SDfinansbot ──
     kassa_token = os.getenv("KASSA_BOT_TOKEN", "")
-
+    kassa_bot = None
+    kassa_dp = None
     if kassa_token:
         kassa_bot = Bot(
             token=kassa_token,
@@ -136,25 +138,48 @@ async def main():
         kassa_dp = Dispatcher()
         kassa_dp.include_router(kassa_router)
         kassa_dp.include_router(subscription.router)
-
         await kassa_bot.delete_webhook(drop_pending_updates=True)
         logger.info("Касса-бот (@SDfinansbot) запущен")
-
-        try:
-            # Запускаем оба бота параллельно
-            await asyncio.gather(
-                dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types(), polling_timeout=30),
-                kassa_dp.start_polling(kassa_bot, allowed_updates=kassa_dp.resolve_used_update_types(), polling_timeout=30),
-            )
-        finally:
-            await bot.session.close()
-            await kassa_bot.session.close()
     else:
         logger.warning("KASSA_BOT_TOKEN не задан — касса-бот не запущен")
-        try:
-            await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types(), polling_timeout=30)
-        finally:
-            await bot.session.close()
+
+    # ── Бот ЗВС @SDzvsbot ──
+    zvs_token = os.getenv("ZVS_BOT_TOKEN", "")
+    zvs_bot = None
+    zvs_dp = None
+    if zvs_token:
+        zvs_bot = Bot(
+            token=zvs_token,
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+        )
+        zvs_dp = Dispatcher(storage=MemoryStorage())
+        zvs_dp.include_router(zvs_handlers.router)
+        await zvs_bot.delete_webhook(drop_pending_updates=True)
+        logger.info("ЗВС-бот запущен")
+    else:
+        logger.warning("ZVS_BOT_TOKEN не задан — ЗВС-бот не запущен")
+
+    # ── Запуск всех ботов параллельно ──
+    tasks = [
+        dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types(), polling_timeout=30)
+    ]
+    if kassa_bot and kassa_dp:
+        tasks.append(
+            kassa_dp.start_polling(kassa_bot, allowed_updates=kassa_dp.resolve_used_update_types(), polling_timeout=30)
+        )
+    if zvs_bot and zvs_dp:
+        tasks.append(
+            zvs_dp.start_polling(zvs_bot, allowed_updates=zvs_dp.resolve_used_update_types(), polling_timeout=30)
+        )
+
+    try:
+        await asyncio.gather(*tasks)
+    finally:
+        await bot.session.close()
+        if kassa_bot:
+            await kassa_bot.session.close()
+        if zvs_bot:
+            await zvs_bot.session.close()
 
 
 if __name__ == "__main__":
