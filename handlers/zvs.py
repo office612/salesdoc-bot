@@ -166,8 +166,12 @@ async def handle_web_app_form(message: Message, state: FSMContext):
         reply_markup=zvs_main_menu(),
     )
     # Запоминаем — чтоб при одобрении/отклонении ОТРЕДАКТИРОВАТЬ это сообщение,
-    # а не слать новое
-    await asyncio.to_thread(save_applicant_msg, zvs_id, sent.chat.id, sent.message_id)
+    # а не слать новое. Под try — Sheets иногда падает, это не должно
+    # ломать отправку уведомления директору.
+    try:
+        await asyncio.to_thread(save_applicant_msg, zvs_id, sent.chat.id, sent.message_id)
+    except Exception as e:
+        logger.error(f"save_applicant_msg failed for #{zvs_id}: {e}")
 
     # Уведомление директору
     username = f"@{message.from_user.username}" if message.from_user.username else "—"
@@ -315,9 +319,12 @@ async def confirm_send(callback: CallbackQuery, state: FSMContext):
             f"{_format_amount(amount)} тг · {account.capitalize()}\n"
             f"{purpose}"
         )
-        await asyncio.to_thread(save_applicant_msg, zvs_id, callback.message.chat.id, callback.message.message_id)
     except Exception:
         pass
+    try:
+        await asyncio.to_thread(save_applicant_msg, zvs_id, callback.message.chat.id, callback.message.message_id)
+    except Exception as e:
+        logger.error(f"save_applicant_msg failed for #{zvs_id}: {e}")
 
     # Уведомление директору — через ОТДЕЛЬНЫЙ директорский бот (кэшированный)
     username = f"@{callback.from_user.username}" if callback.from_user.username else "—"
