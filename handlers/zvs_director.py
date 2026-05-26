@@ -317,6 +317,7 @@ async def _finalize_decision(
     )
     applicant_bot = await _get_applicant_bot()
     loc = await asyncio.to_thread(get_applicant_msg, zvs_id)
+    logger.info(f"[finalize] zvs_id={zvs_id} loc={loc}")
     edited = False
     if loc:
         chat_id, message_id = loc
@@ -327,11 +328,13 @@ async def _finalize_decision(
                 message_id=message_id,
             )
             edited = True
+            logger.info(f"[finalize] edited applicant msg #{zvs_id} OK")
         except Exception as e:
-            logger.warning(f"edit applicant msg failed, fallback to send: {e}")
+            logger.warning(f"[finalize] edit applicant msg #{zvs_id} FAILED: {type(e).__name__}: {e}")
     if not edited:
         try:
             await applicant_bot.send_message(applicant_uid, applicant_text)
+            logger.info(f"[finalize] sent NEW msg to applicant #{zvs_id} (fallback)")
         except Exception as e:
             logger.error(f"notify applicant {applicant_uid}: {e}")
 
