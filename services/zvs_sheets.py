@@ -233,27 +233,31 @@ def _setup_summary_sheet(ss):
 
     ws = ss.add_worksheet(title="Итоги", rows=50, cols=6)
 
-    # Заголовки разделов и формулы
+    # Формулы — синтаксис под русскую локаль Sheets (разделитель `;` вместо `,`).
+    # Все статистики — за всё время (без привязки к месяцу), потому что
+    # дата в колонке B хранится как строка "DD.MM.YYYY HH:MM", фильтр по EOMONTH
+    # с такой строкой не работает.
     data = [
         ["📊 Сводка по ЗВС", "", "", "", "", ""],
         ["Обновляется автоматически при новых заявках", "", "", "", "", ""],
         ["", "", "", "", "", ""],
-        ["🗓 Этот месяц", "", "", "", "", ""],
-        ["Заявок всего",     '=COUNTIFS(requests!B:B, ">="&EOMONTH(TODAY(),-1)+1, requests!B:B, "<="&EOMONTH(TODAY(),0))', "", "", "", ""],
-        ["Одобрено (тг)",    '=SUMIFS(requests!E:E, requests!H:H, "Одобрено", requests!B:B, ">="&EOMONTH(TODAY(),-1)+1)', "", "", "", ""],
-        ["Ожидает (шт)",     '=COUNTIF(requests!H:H, "Ожидает")', "", "", "", ""],
-        ["Ожидает (тг)",     '=SUMIF(requests!H:H, "Ожидает", requests!E:E)', "", "", "", ""],
-        ["Отклонено (шт)",   '=COUNTIFS(requests!H:H, "Отклонено", requests!B:B, ">="&EOMONTH(TODAY(),-1)+1)', "", "", "", ""],
-        ["На доработку (шт)",'=COUNTIF(requests!H:H, "На доработку")', "", "", "", ""],
+        ["📋 За всё время", "", "", "", "", ""],
+        ["Заявок всего",      '=COUNTA(requests!A2:A)', "", "", "", ""],
+        ["Одобрено (шт)",     '=COUNTIF(requests!H:H; "Одобрено")', "", "", "", ""],
+        ["Одобрено (тг)",     '=SUMIF(requests!H:H; "Одобрено"; requests!E:E)', "", "", "", ""],
+        ["Ожидает (шт)",      '=COUNTIF(requests!H:H; "Ожидает")', "", "", "", ""],
+        ["Ожидает (тг)",      '=SUMIF(requests!H:H; "Ожидает"; requests!E:E)', "", "", "", ""],
+        ["Отклонено (шт)",    '=COUNTIF(requests!H:H; "Отклонено")', "", "", "", ""],
+        ["На доработку (шт)", '=COUNTIF(requests!H:H; "На доработку")', "", "", "", ""],
         ["", "", "", "", "", ""],
-        ["🏦 По счетам (за всё время, одобрено)", "", "", "", "", ""],
-        ["Халык",   '=SUMIFS(requests!E:E, requests!H:H, "Одобрено", requests!G:G, "халык")', "", "", "", ""],
-        ["Каспи",   '=SUMIFS(requests!E:E, requests!H:H, "Одобрено", requests!G:G, "каспи")', "", "", "", ""],
-        ["Наличка", '=SUMIFS(requests!E:E, requests!H:H, "Одобрено", requests!G:G, "Наличка")', "", "", "", ""],
+        ["🏦 По счетам (одобрено)", "", "", "", "", ""],
+        ["Халык",   '=SUMIFS(requests!E:E; requests!H:H; "Одобрено"; requests!G:G; "халык")', "", "", "", ""],
+        ["Каспи",   '=SUMIFS(requests!E:E; requests!H:H; "Одобрено"; requests!G:G; "каспи")', "", "", "", ""],
+        ["Наличка", '=SUMIFS(requests!E:E; requests!H:H; "Одобрено"; requests!G:G; "Наличка")', "", "", "", ""],
         ["", "", "", "", "", ""],
-        ["🏆 Топ заявителей (одобрено за месяц)", "", "", "", "", ""],
+        ["🏆 Топ заявителей (одобрено)", "", "", "", "", ""],
         ["", "", "", "", "", ""],
-        ['=QUERY(requests!D:H, "select D, sum(E) where H=\'Одобрено\' group by D order by sum(E) desc label sum(E) \'Сумма\'", 0)', "", "", "", "", ""],
+        ['=IFERROR(QUERY(requests!D2:H; "select D, sum(E) where H=\'Одобрено\' group by D order by sum(E) desc label D \'Сотрудник\', sum(E) \'Сумма\'"; 0); "Пока нет одобренных заявок")', "", "", "", "", ""],
     ]
     ws.update("A1:F" + str(len(data)), data, value_input_option="USER_ENTERED")
 
@@ -264,16 +268,17 @@ def _setup_summary_sheet(ss):
     ws.format("A2", {
         "textFormat": {"italic": True, "foregroundColor": {"red": 0.5, "green": 0.5, "blue": 0.5}},
     })
-    for r in (4, 12, 17):
+    # Заголовки разделов — строки 4, 13, 18 после обновления
+    for r in (4, 13, 18):
         ws.format(f"A{r}", {
             "textFormat": {"bold": True, "fontSize": 13},
             "backgroundColor": {"red": 0.92, "green": 0.94, "blue": 0.98},
         })
 
     # Суммы — числовой формат с тг
-    ws.format("B6:B6", {"numberFormat": {"type": "NUMBER", "pattern": '#,##0" тг"'}})
-    ws.format("B8:B8", {"numberFormat": {"type": "NUMBER", "pattern": '#,##0" тг"'}})
-    ws.format("B13:B15", {"numberFormat": {"type": "NUMBER", "pattern": '#,##0" тг"'}})
+    ws.format("B7", {"numberFormat": {"type": "NUMBER", "pattern": '#,##0" тг"'}})    # Одобрено (тг)
+    ws.format("B9", {"numberFormat": {"type": "NUMBER", "pattern": '#,##0" тг"'}})    # Ожидает (тг)
+    ws.format("B14:B16", {"numberFormat": {"type": "NUMBER", "pattern": '#,##0" тг"'}})  # По счетам
 
     # Ширины
     sheet_id = ws.id
