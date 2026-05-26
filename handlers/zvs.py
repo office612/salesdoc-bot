@@ -167,7 +167,7 @@ async def handle_web_app_form(message: Message, state: FSMContext):
     )
     # Запоминаем — чтоб при одобрении/отклонении ОТРЕДАКТИРОВАТЬ это сообщение,
     # а не слать новое
-    save_applicant_msg(zvs_id, sent.chat.id, sent.message_id)
+    await asyncio.to_thread(save_applicant_msg, zvs_id, sent.chat.id, sent.message_id)
 
     # Уведомление директору
     username = f"@{message.from_user.username}" if message.from_user.username else "—"
@@ -315,7 +315,7 @@ async def confirm_send(callback: CallbackQuery, state: FSMContext):
             f"{_format_amount(amount)} тг · {account.capitalize()}\n"
             f"{purpose}"
         )
-        save_applicant_msg(zvs_id, callback.message.chat.id, callback.message.message_id)
+        await asyncio.to_thread(save_applicant_msg, zvs_id, callback.message.chat.id, callback.message.message_id)
     except Exception:
         pass
 

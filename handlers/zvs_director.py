@@ -316,7 +316,7 @@ async def _finalize_decision(
         f"{tail}"
     )
     applicant_bot = await _get_applicant_bot()
-    loc = get_applicant_msg(zvs_id)
+    loc = await asyncio.to_thread(get_applicant_msg, zvs_id)
     edited = False
     if loc:
         chat_id, message_id = loc

@@ -29,6 +29,7 @@ from config import TIMEZONE
 logger = logging.getLogger(__name__)
 
 META_SHEET_NAME = "_meta"
+MSG_IDS_SHEET_NAME = "_msg_ids"
 SUMMARY_SHEET_NAME = "Итоги"
 
 # Шапка
@@ -134,6 +135,56 @@ def _get_meta_sheet():
         except Exception:
             pass
         return ws
+
+
+def _get_msg_ids_sheet():
+    """Лист для хранения (zvs_id, chat_id, message_id) сообщений-подтверждений
+    у заявителя. Чтоб при одобрении РЕДАКТИРОВАТЬ исходное сообщение, а не
+    слать новое. Переживает рестарт бота (в отличие от in-memory)."""
+    ss = _ss()
+    try:
+        return ss.worksheet(MSG_IDS_SHEET_NAME)
+    except gspread.WorksheetNotFound:
+        ws = ss.add_worksheet(title=MSG_IDS_SHEET_NAME, rows=5000, cols=3)
+        ws.append_row(["zvs_id", "chat_id", "message_id"])
+        try:
+            ss.batch_update({"requests": [{
+                "updateSheetProperties": {
+                    "properties": {"sheetId": ws.id, "hidden": True},
+                    "fields": "hidden",
+                }
+            }]})
+        except Exception:
+            pass
+        return ws
+
+
+def save_applicant_message(zvs_id: int, chat_id: int, message_id: int) -> bool:
+    """Запомнить (chat_id, message_id) сообщения у заявителя для этой заявки."""
+    try:
+        ws = _get_msg_ids_sheet()
+        ws.append_row([str(int(zvs_id)), str(int(chat_id)), str(int(message_id))])
+        return True
+    except Exception as e:
+        logger.error(f"save_applicant_message: {e}")
+        return False
+
+
+def get_applicant_message(zvs_id: int):
+    """Получить (chat_id, message_id) для заявки. None если нет."""
+    try:
+        ws = _get_msg_ids_sheet()
+        rows = ws.get_all_values()
+        target = str(int(zvs_id))
+        for row in reversed(rows[1:]):  # ищем с конца (новые свежее)
+            if len(row) >= 3 and str(row[0]).strip() == target:
+                try:
+                    return int(row[1]), int(row[2])
+                except (ValueError, TypeError):
+                    return None
+    except Exception as e:
+        logger.error(f"get_applicant_message: {e}")
+    return None
 
 
 def _next_zvs_id() -> int:
