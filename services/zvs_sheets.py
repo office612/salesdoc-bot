@@ -156,18 +156,19 @@ def _next_zvs_id() -> int:
 # ────────────────────────────────────────────────────────────
 
 def get_week_sheet(d: Optional[date] = None):
-    """Получить или создать недельный лист. Если новый — оформить стили."""
+    """Получить или создать недельный лист. Если новый — оформить стили + сводку."""
     label = get_week_label(d)
     ss = _ss()
     try:
         return ss.worksheet(label)
     except gspread.WorksheetNotFound:
-        ws = ss.add_worksheet(title=label, rows=200, cols=len(HEADER))
+        ws = ss.add_worksheet(title=label, rows=200, cols=20)
         ws.append_row(HEADER, value_input_option="USER_ENTERED")
         try:
             _apply_styling(ss, ws)
             _apply_conditional_formatting(ss, ws)
             _setup_data_validation(ss, ws)
+            _apply_inline_summary(ss, ws, label)  # сводка справа от данных
             logger.info(f"Создан недельный лист {label}")
         except Exception as e:
             logger.error(f"Стили для {label}: {e}")
@@ -440,6 +441,79 @@ def _apply_conditional_formatting(ss, ws):
     })
 
     ss.batch_update({"requests": requests})
+
+
+def _apply_inline_summary(ss, ws, week_label: str):
+    """Сводка ЭТОЙ недели справа от данных — колонки N и O.
+    Формулы относительные к листу, ничего не нужно обновлять при ротации недель."""
+    data = [
+        [f"📊 Сводка недели", ""],
+        [week_label, ""],
+        ["", ""],
+        ["Заявок всего",       '=COUNTA(A2:A)'],
+        ["", ""],
+        ["⏳ Ожидает (шт)",     '=COUNTIF(H:H, "Ожидает")'],
+        ["⏳ Ожидает (тг)",     '=SUMIF(H:H, "Ожидает", E:E)'],
+        ["", ""],
+        ["✅ Одобрено (шт)",    '=COUNTIF(H:H, "Одобрено")'],
+        ["✅ Одобрено (тг)",    '=SUMIF(H:H, "Одобрено", E:E)'],
+        ["", ""],
+        ["💰 Оплачено (шт)",    '=COUNTIF(L:L, "Да")'],
+        ["💰 Оплачено (тг)",    '=SUMIF(L:L, "Да", E:E)'],
+        ["", ""],
+        ["❌ Отклонено (шт)",   '=COUNTIF(H:H, "Отклонено")'],
+        ["🔄 На доработку (шт)",'=COUNTIF(H:H, "На доработку")'],
+        ["", ""],
+        ["🏦 По счетам (одобрено)", ""],
+        ["Халык",   '=SUMIFS(E:E, H:H, "Одобрено", G:G, "халык")'],
+        ["Каспи",   '=SUMIFS(E:E, H:H, "Одобрено", G:G, "каспи")'],
+        ["Наличка", '=SUMIFS(E:E, H:H, "Одобрено", G:G, "Наличка")'],
+    ]
+    # Записываем в колонки N:O начиная с строки 1
+    ws.update("N1:O" + str(len(data)), data, value_input_option="USER_ENTERED")
+
+    # Стили: заголовок крупный
+    ws.format("N1:O1", {
+        "textFormat": {"bold": True, "fontSize": 14},
+        "backgroundColor": {"red": 0.15, "green": 0.32, "blue": 0.59},
+        "horizontalAlignment": "CENTER",
+    })
+    ws.format("N1:O1", {
+        "textFormat": {"foregroundColor": {"red": 1, "green": 1, "blue": 1}, "bold": True, "fontSize": 14},
+    })
+    ws.format("N2:O2", {
+        "textFormat": {"italic": True},
+        "horizontalAlignment": "CENTER",
+    })
+
+    # Суммы — формат тг
+    for cell in ("O7", "O10", "O13", "O19", "O20", "O21"):
+        ws.format(cell, {
+            "numberFormat": {"type": "NUMBER", "pattern": '#,##0" тг"'},
+            "horizontalAlignment": "RIGHT",
+            "textFormat": {"bold": True},
+        })
+
+    # Подзаголовок «По счетам»
+    ws.format("N18:O18", {
+        "textFormat": {"bold": True, "fontSize": 12},
+        "backgroundColor": {"red": 0.92, "green": 0.94, "blue": 0.98},
+    })
+
+    # Ширина колонок N и O
+    sheet_id = ws.id
+    ss.batch_update({"requests": [
+        {"updateDimensionProperties": {
+            "range": {"sheetId": sheet_id, "dimension": "COLUMNS", "startIndex": 13, "endIndex": 14},
+            "properties": {"pixelSize": 200},
+            "fields": "pixelSize",
+        }},
+        {"updateDimensionProperties": {
+            "range": {"sheetId": sheet_id, "dimension": "COLUMNS", "startIndex": 14, "endIndex": 15},
+            "properties": {"pixelSize": 130},
+            "fields": "pixelSize",
+        }},
+    ]})
 
 
 def _setup_data_validation(ss, ws):

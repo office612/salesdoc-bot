@@ -109,6 +109,22 @@ async def planted_handler(callback: CallbackQuery):
 
     await callback.answer("✅ Посажено!")
 
+
+async def _weekly_sheet_keeper():
+    """Раз в час проверяет, есть ли лист текущей недели в ЗВС-таблице.
+    Если нет (например наступил новый вторник) — создаёт пустой лист
+    со стилями и сводкой. Так лист появляется даже если заявок нет."""
+    if not os.getenv("ZVS_BOT_TOKEN") or not os.getenv("ZVS_SPREADSHEET_ID"):
+        return
+    from services.zvs_sheets import get_current_week_sheet, get_week_label
+    while True:
+        try:
+            await asyncio.to_thread(get_current_week_sheet)
+        except Exception as e:
+            logger.error(f"weekly_sheet_keeper: {e}")
+        await asyncio.sleep(3600)  # раз в час
+
+
 async def main():
     # ── Основной бот @sakesdocbot ──
     bot = Bot(
@@ -199,6 +215,10 @@ async def main():
         tasks.append(
             zvs_dir_dp.start_polling(zvs_dir_bot, allowed_updates=zvs_dir_dp.resolve_used_update_types(), polling_timeout=30)
         )
+
+    # Фоновая задача — каждый час проверяет лист текущей недели
+    if zvs_token:
+        tasks.append(_weekly_sheet_keeper())
 
     try:
         await asyncio.gather(*tasks)
