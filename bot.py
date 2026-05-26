@@ -2,6 +2,9 @@ import asyncio
 import logging
 import os
 import sys
+from pathlib import Path
+
+from aiohttp import web
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
@@ -108,6 +111,32 @@ async def planted_handler(callback: CallbackQuery):
             logger.error(f"Notify other planted {chat_id}: {e}")
 
     await callback.answer("✅ Посажено!")
+
+
+DOCS_DIR = Path(__file__).parent / "docs"
+
+
+async def _start_webapp_server():
+    """Раздаёт статику из ./docs/ — для Telegram WebApp формы.
+    Railway передаёт PORT в env. Если не задан — берём 8080."""
+    port = int(os.getenv("PORT", "8080"))
+    app = web.Application()
+
+    async def index(request):
+        return web.HTTPFound("/zvs.html")
+
+    async def health(request):
+        return web.Response(text="ok")
+
+    app.router.add_get("/", index)
+    app.router.add_get("/health", health)
+    app.router.add_static("/", path=str(DOCS_DIR), show_index=False)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, host="0.0.0.0", port=port)
+    await site.start()
+    logger.info(f"Веб-сервер для WebApp формы запущен на порту {port}")
 
 
 async def _weekly_sheet_keeper():
@@ -219,6 +248,9 @@ async def main():
     # Фоновая задача — каждый час проверяет лист текущей недели
     if zvs_token:
         tasks.append(_weekly_sheet_keeper())
+
+    # HTTP-сервер для Telegram WebApp формы (раздаёт docs/zvs.html)
+    await _start_webapp_server()
 
     try:
         await asyncio.gather(*tasks)
