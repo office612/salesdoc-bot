@@ -158,9 +158,9 @@ async def main():
         await zvs_bot.delete_webhook(drop_pending_updates=True)
         # Инициализируем таблицу заранее — чтоб директор видел листы до первой заявки
         try:
-            from services.zvs_sheets import get_zvs_sheet
-            await asyncio.to_thread(get_zvs_sheet)
-            logger.info("ЗВС таблица инициализирована (листы requests + Итоги)")
+            from services.zvs_sheets import init_zvs_storage
+            await asyncio.to_thread(init_zvs_storage)
+            logger.info("ЗВС таблица инициализирована (текущая неделя + Итоги + _meta)")
         except Exception as e:
             logger.error(f"Не удалось инициализировать ЗВС таблицу: {e}")
         logger.info("ЗВС-бот для сотрудников запущен")
