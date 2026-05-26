@@ -111,10 +111,18 @@ def get_current_sheet():
 def get_or_create_users_sheet():
     ss = get_spreadsheet()
     try:
-        return ss.worksheet("users")
+        ws = ss.worksheet("users")
+        # Дозаполняем заголовок subscribed, если его ещё нет (для старых таблиц)
+        try:
+            header = ws.row_values(1)
+            if len(header) < 5 or (header[4] if len(header) > 4 else "") != "subscribed":
+                ws.update_cell(1, 5, "subscribed")
+        except Exception:
+            pass
+        return ws
     except gspread.WorksheetNotFound:
         ws = ss.add_worksheet(title="users", rows=1000, cols=10)
-        ws.append_row(["telegram_id", "name", "role", "registered_at"])
+        ws.append_row(["telegram_id", "name", "role", "registered_at", "subscribed"])
         return ws
 
 
@@ -339,7 +347,7 @@ def register_user(telegram_id: int, name: str, role: str) -> bool:
 def mark_planted(row_num: int, month: int) -> bool:
     """Записывает 'Да' в столбец L указанной строки.
 
-    Используется кнопкой Посажено в @kassasdkzbot.
+    Используется кнопкой Посажено в @SDfinansbot.
     """
     try:
         sheet_name = MONTH_SHEETS.get(month)
@@ -354,4 +362,80 @@ def mark_planted(row_num: int, month: int) -> bool:
         return True
     except Exception as e:
         logger.error(f"mark_planted error: {e}", exc_info=True)
+        return False
+
+
+# ────────────────────────────────────────────────────────────
+# Подписки на уведомления + лог ошибок бота
+# Колонка E в листе users: "subscribed" (TRUE/FALSE). Пусто = подписан.
+# ────────────────────────────────────────────────────────────
+
+def get_user_name(telegram_id: int) -> Optional[str]:
+    """Имя пользователя по tg_id — для лога ошибок."""
+    user = get_user(telegram_id)
+    if user:
+        return user.get("name", "")
+    return None
+
+
+def is_subscribed(telegram_id: int) -> bool:
+    """Подписан ли юзер на уведомления. По умолчанию TRUE."""
+    try:
+        ws = get_or_create_users_sheet()
+        rows = ws.get_all_values()
+        for row in rows[1:]:
+            if row and str(row[0]) == str(telegram_id):
+                # Колонка E (index 4) = subscribed
+                if len(row) > 4:
+                    val = str(row[4]).strip().upper()
+                    if val == "FALSE":
+                        return False
+                return True
+        # Юзер не в таблице (например, директор) — считаем что подписан
+        return True
+    except Exception as e:
+        logger.error(f"is_subscribed: {e}")
+        return True  # При ошибке — лучше отправить, чем потерять уведомление
+
+
+def set_subscription(telegram_id: int, subscribed: bool) -> bool:
+    """Переключает подписку. Возвращает True если успешно."""
+    try:
+        ws = get_or_create_users_sheet()
+        rows = ws.get_all_values()
+        val = "TRUE" if subscribed else "FALSE"
+        for i, row in enumerate(rows[1:], start=2):
+            if row and str(row[0]) == str(telegram_id):
+                ws.update_cell(i, 5, val)  # Колонка E
+                logger.info(f"set_subscription: {telegram_id} -> {val}")
+                return True
+        # Юзера нет — добавлять не будем (директор/случайный)
+        logger.warning(f"set_subscription: юзер {telegram_id} не найден")
+        return False
+    except Exception as e:
+        logger.error(f"set_subscription: {e}")
+        return False
+
+
+def get_or_create_bot_errors_sheet():
+    """Лист bot_errors для логирования сбоев отправки."""
+    ss = get_spreadsheet()
+    try:
+        return ss.worksheet("bot_errors")
+    except gspread.WorksheetNotFound:
+        ws = ss.add_worksheet(title="bot_errors", rows=1000, cols=6)
+        ws.append_row(["timestamp", "chat_id", "name", "error_type", "details", "resolved"])
+        return ws
+
+
+def log_bot_error(chat_id: int, name: str, error_type: str, details: str) -> bool:
+    """Пишет строку в bot_errors. Никогда не падает — только лог."""
+    try:
+        ws = get_or_create_bot_errors_sheet()
+        tz = pytz.timezone(TIMEZONE)
+        ts = datetime.now(tz).strftime("%d.%m.%Y %H:%M:%S")
+        ws.append_row([ts, str(chat_id), name, error_type, details, ""])
+        return True
+    except Exception as e:
+        logger.error(f"log_bot_error failed: {e}")
         return False

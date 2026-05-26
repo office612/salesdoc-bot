@@ -12,10 +12,12 @@ from keyboards.payment import (
     back_button, service_categories_kb, calendar_kb, managers_kb,
     fact_confirm_kb,
 )
-from services.sheets import add_payment
+from services.sheets import add_payment, is_subscribed
 from services.salesdoc_sync import sync_payment_to_salesdoc
 from services.users import get_user_info, is_accountant, is_manager, fix_legacy_name
 from services.planted_store import save_messages
+from services.notify import safe_send_message, safe_send_photo, SEND_DELAY
+import asyncio
 from config import (
     CATEGORIES, DIRECTOR_ID, ACCOUNTANT_IDS, MONTH_SHEETS,
     PRICES_NEW, PRICES_OLD, TIMEZONE, EMPLOYEES, LEADER,
@@ -683,21 +685,25 @@ async def save_payment(message: Message, state: FSMContext, bot: Bot, callback=N
         lines.append(f"📊 Строки: {', '.join(str(r) for r in row_nums)}")
         notify_text = "\n".join(lines)
 
-        # Кнопка Посажено для ВСЕХ строк
         rows_str = ",".join(str(r) for r in row_nums)
-        planted_kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(
+
+        def build_kb(include_unsub: bool) -> InlineKeyboardMarkup:
+            row = [InlineKeyboardButton(
                 text="❓ Посажено?",
                 callback_data=f"planted:{rows_str}:{month}"
             )]
-        ])
+            if include_unsub:
+                row.append(InlineKeyboardButton(
+                    text="🔕 Отписаться",
+                    callback_data="unsub:start"
+                ))
+            return InlineKeyboardMarkup(inline_keyboard=[row])
 
         kassa_token = os.getenv("KASSA_BOT_TOKEN", "")
         if kassa_token:
             from aiogram.client.default import DefaultBotProperties
             from aiogram.enums import ParseMode as PM
             from io import BytesIO
-            from aiogram.types import BufferedInputFile
             kassa_bot = Bot(token=kassa_token, default=DefaultBotProperties(parse_mode=PM.HTML))
 
             photo_bytes = None
@@ -713,22 +719,27 @@ async def save_payment(message: Message, state: FSMContext, bot: Bot, callback=N
             notify_ids = [DIRECTOR_ID] + ACCOUNTANT_IDS
             sent_messages = []  # (chat_id, message_id) для planted_store
             for uid in notify_ids:
-                try:
-                    if photo_bytes:
-                        sent = await kassa_bot.send_photo(
-                            uid,
-                            BufferedInputFile(photo_bytes, filename="receipt.jpg"),
-                            caption=notify_text,
-                            reply_markup=planted_kb
-                        )
-                    else:
-                        sent = await kassa_bot.send_message(
-                            uid, notify_text,
-                            reply_markup=planted_kb
-                        )
-                    sent_messages.append((uid, sent.message_id))
-                except Exception as e:
-                    logger.error(f"Kassa notify {uid}: {e}")
+                # Директор всегда получает; остальные — только если подписаны
+                if uid != DIRECTOR_ID and not is_subscribed(uid):
+                    continue
+
+                # Кнопка «Отписаться» — только для не-директора (чтоб случайно не отписаться)
+                kb = build_kb(include_unsub=(uid != DIRECTOR_ID))
+
+                if photo_bytes:
+                    ok, msg_id = await safe_send_photo(
+                        kassa_bot, uid, photo_bytes, notify_text, kb
+                    )
+                else:
+                    ok, msg_id = await safe_send_message(
+                        kassa_bot, uid, notify_text, kb
+                    )
+
+                if ok and msg_id:
+                    sent_messages.append((uid, msg_id))
+
+                # Пауза между отправками — чтоб не упереться в лимит Telegram
+                await asyncio.sleep(SEND_DELAY)
 
             # Сохраняем message_id чтобы при нажатии "Посажено" обновить ВСЕ сообщения
             planted_key = f"{rows_str}:{month}"

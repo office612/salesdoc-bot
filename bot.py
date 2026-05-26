@@ -10,7 +10,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import CallbackQuery
 
 from config import BOT_TOKEN
-from handlers import start, payment, reports
+from handlers import start, payment, reports, subscription
 
 from services.sheets import mark_planted
 from services.planted_store import get_messages
@@ -25,7 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# ── Роутер для @kassasdkzbot — обработка кнопки «Посажено» ──
+# ── Роутер для @SDfinansbot — обработка кнопки «Посажено» ──
 kassa_router = Router()
 
 @kassa_router.callback_query(F.data.startswith("planted:"))
@@ -111,7 +111,7 @@ async def main():
     await bot.delete_webhook(drop_pending_updates=True)
     logger.info("Webhook удалён, старые апдейты очищены")
 
-    # ── Бот кассы @kassasdkzbot ──
+    # ── Бот кассы @SDfinansbot ──
     kassa_token = os.getenv("KASSA_BOT_TOKEN", "")
 
     if kassa_token:
@@ -121,9 +121,10 @@ async def main():
         )
         kassa_dp = Dispatcher()
         kassa_dp.include_router(kassa_router)
+        kassa_dp.include_router(subscription.router)
 
         await kassa_bot.delete_webhook(drop_pending_updates=True)
-        logger.info("Касса-бот (@kassasdkzbot) запущен")
+        logger.info("Касса-бот (@SDfinansbot) запущен")
 
         try:
             # Запускаем оба бота параллельно
