@@ -12,6 +12,7 @@ from aiogram.types import CallbackQuery
 from config import BOT_TOKEN, DIRECTOR_ID, ACCOUNTANT_IDS
 from handlers import start, payment, reports, subscription
 from handlers import zvs as zvs_handlers
+from handlers import zvs_director as zvs_director_handlers
 
 from services.sheets import mark_planted, get_user
 from services.planted_store import get_messages
@@ -162,9 +163,25 @@ async def main():
             logger.info("ЗВС таблица инициализирована (листы requests + Итоги)")
         except Exception as e:
             logger.error(f"Не удалось инициализировать ЗВС таблицу: {e}")
-        logger.info("ЗВС-бот запущен")
+        logger.info("ЗВС-бот для сотрудников запущен")
     else:
-        logger.warning("ZVS_BOT_TOKEN не задан — ЗВС-бот не запущен")
+        logger.warning("ZVS_BOT_TOKEN не задан — ЗВС-бот сотрудников не запущен")
+
+    # ── Бот ЗВС для директора ──
+    zvs_dir_token = os.getenv("ZVS_DIR_BOT_TOKEN", "")
+    zvs_dir_bot = None
+    zvs_dir_dp = None
+    if zvs_dir_token:
+        zvs_dir_bot = Bot(
+            token=zvs_dir_token,
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+        )
+        zvs_dir_dp = Dispatcher(storage=MemoryStorage())
+        zvs_dir_dp.include_router(zvs_director_handlers.router)
+        await zvs_dir_bot.delete_webhook(drop_pending_updates=True)
+        logger.info("ЗВС-бот для директора запущен")
+    else:
+        logger.warning("ZVS_DIR_BOT_TOKEN не задан — ЗВС-бот директора не запущен")
 
     # ── Запуск всех ботов параллельно ──
     tasks = [
@@ -178,6 +195,10 @@ async def main():
         tasks.append(
             zvs_dp.start_polling(zvs_bot, allowed_updates=zvs_dp.resolve_used_update_types(), polling_timeout=30)
         )
+    if zvs_dir_bot and zvs_dir_dp:
+        tasks.append(
+            zvs_dir_dp.start_polling(zvs_dir_bot, allowed_updates=zvs_dir_dp.resolve_used_update_types(), polling_timeout=30)
+        )
 
     try:
         await asyncio.gather(*tasks)
@@ -187,6 +208,8 @@ async def main():
             await kassa_bot.session.close()
         if zvs_bot:
             await zvs_bot.session.close()
+        if zvs_dir_bot:
+            await zvs_dir_bot.session.close()
 
 
 if __name__ == "__main__":
