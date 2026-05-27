@@ -41,20 +41,14 @@ def _format_amount(amount) -> str:
         return str(amount)
 
 
-_applicant_bot_cache: Bot | None = None
-
-
 async def _get_applicant_bot() -> Bot:
-    """Кэшированный клиент к боту сотрудников. Один на жизнь процесса —
-    SSL handshake не повторяется при каждом одобрении."""
-    global _applicant_bot_cache
-    if _applicant_bot_cache is None or _applicant_bot_cache.session.closed:
-        token = os.getenv("ZVS_BOT_TOKEN", "")
-        _applicant_bot_cache = Bot(
-            token=token,
-            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-        )
-    return _applicant_bot_cache
+    """Создаём новый Bot каждый раз — кэш не надёжен, session может умереть.
+    Создание Bot быстрое (~50мс), это окупается надёжностью."""
+    token = os.getenv("ZVS_BOT_TOKEN", "")
+    return Bot(
+        token=token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
 
 
 # ────────────────────────────────────────────────────────────
@@ -108,35 +102,41 @@ async def handle_register(callback: CallbackQuery):
     name = pending.get("name") or "Сотрудник"
     applicant_bot = await _get_applicant_bot()
 
-    if action == "ok":
-        await asyncio.to_thread(register_user, tg_id, name, "employee")
-        pending_remove(tg_id)
+    try:
+        if action == "ok":
+            await asyncio.to_thread(register_user, tg_id, name, "employee")
+            pending_remove(tg_id)
+            try:
+                await callback.message.edit_text(
+                    callback.message.text + "\n\n✅ <b>Доступ открыт</b>"
+                )
+            except Exception:
+                pass
+            try:
+                await applicant_bot.send_message(
+                    tg_id,
+                    "✅ Доступ к ЗВС-боту открыт!\n\nНажми /start чтобы начать."
+                )
+            except Exception as e:
+                logger.warning(f"notify employee approved: {e}")
+        else:
+            pending_remove(tg_id)
+            try:
+                await callback.message.edit_text(
+                    callback.message.text + "\n\n❌ <b>Отказано</b>"
+                )
+            except Exception:
+                pass
+            try:
+                await applicant_bot.send_message(
+                    tg_id,
+                    "❌ В доступе отказано. Если ошибка — пиши директору лично."
+                )
+            except Exception:
+                pass
+    finally:
         try:
-            await callback.message.edit_text(
-                callback.message.text + "\n\n✅ <b>Доступ открыт</b>"
-            )
-        except Exception:
-            pass
-        try:
-            await applicant_bot.send_message(
-                tg_id,
-                "✅ Доступ к ЗВС-боту открыт!\n\nНажми /start чтобы начать."
-            )
-        except Exception as e:
-            logger.warning(f"notify employee approved: {e}")
-    else:
-        pending_remove(tg_id)
-        try:
-            await callback.message.edit_text(
-                callback.message.text + "\n\n❌ <b>Отказано</b>"
-            )
-        except Exception:
-            pass
-        try:
-            await applicant_bot.send_message(
-                tg_id,
-                "❌ В доступе отказано. Если ошибка — пиши директору лично."
-            )
+            await applicant_bot.session.close()
         except Exception:
             pass
 
@@ -334,10 +334,16 @@ async def _finalize_decision(
             logger.error(f"notify applicant {applicant_uid}: {e}")
 
     # Обе операции параллельно — экономит ~500мс
-    await asyncio.gather(
-        update_director_msg(),
-        update_applicant_msg(),
-    )
+    try:
+        await asyncio.gather(
+            update_director_msg(),
+            update_applicant_msg(),
+        )
+    finally:
+        try:
+            await applicant_bot.session.close()
+        except Exception:
+            pass
 
 
 # ────────────────────────────────────────────────────────────

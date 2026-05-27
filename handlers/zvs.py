@@ -58,18 +58,16 @@ _director_bot_cache: Bot | None = None
 
 
 async def _get_director_bot() -> Bot:
-    """Кэшированный клиент к директорскому боту. Создаётся один раз —
-    переиспользуем session, SSL handshake не повторяется."""
-    global _director_bot_cache
-    if _director_bot_cache is None or _director_bot_cache.session.closed:
-        token = os.getenv("ZVS_DIR_BOT_TOKEN", "")
-        if not token:
-            raise RuntimeError("ZVS_DIR_BOT_TOKEN не задан — некуда слать заявки")
-        _director_bot_cache = Bot(
-            token=token,
-            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-        )
-    return _director_bot_cache
+    """Клиент к директорскому боту. Создаём НОВЫЙ объект Bot каждый раз —
+    кэш ненадёжен: aiohttp-session внутри может умереть тихо, и тогда
+    send_message молча падает. Создание Bot быстрое (~50мс), это OK."""
+    token = os.getenv("ZVS_DIR_BOT_TOKEN", "")
+    if not token:
+        raise RuntimeError("ZVS_DIR_BOT_TOKEN не задан — некуда слать заявки")
+    return Bot(
+        token=token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
 
 
 # ────────────────────────────────────────────────────────────
@@ -177,9 +175,11 @@ async def handle_web_app_form(message: Message, state: FSMContext):
 
     # Уведомление директору
     username = f"@{message.from_user.username}" if message.from_user.username else "—"
+    director_bot = None
     try:
+        logger.info(f"[notify_director] start for ZVS #{zvs_id}")
         director_bot = await _get_director_bot()
-        await director_bot.send_message(
+        sent_to_director = await director_bot.send_message(
             DIRECTOR_ID,
             f"💸 <b>Новая ЗВС №{zvs_id}</b>\n\n"
             f"👤 {name} ({username})\n"
@@ -188,8 +188,15 @@ async def handle_web_app_form(message: Message, state: FSMContext):
             f"🏦 {account.capitalize()}",
             reply_markup=director_decision_kb(zvs_id, uid),
         )
+        logger.info(f"[notify_director] OK ZVS #{zvs_id} msg_id={sent_to_director.message_id}")
     except Exception as e:
-        logger.error(f"notify director (webapp): {e}")
+        logger.error(f"[notify_director] FAILED for ZVS #{zvs_id}: {type(e).__name__}: {e}", exc_info=True)
+    finally:
+        if director_bot:
+            try:
+                await director_bot.session.close()
+            except Exception:
+                pass
 
 
 # ────────────────────────────────────────────────────────────
@@ -328,11 +335,13 @@ async def confirm_send(callback: CallbackQuery, state: FSMContext):
     except Exception as e:
         logger.error(f"save_applicant_msg failed for #{zvs_id}: {e}")
 
-    # Уведомление директору — через ОТДЕЛЬНЫЙ директорский бот (кэшированный)
+    # Уведомление директору — через ОТДЕЛЬНЫЙ директорский бот
     username = f"@{callback.from_user.username}" if callback.from_user.username else "—"
+    director_bot = None
     try:
+        logger.info(f"[notify_director] start FSM for ZVS #{zvs_id}")
         director_bot = await _get_director_bot()
-        await director_bot.send_message(
+        sent_to_director = await director_bot.send_message(
             DIRECTOR_ID,
             f"💸 <b>Новая ЗВС №{zvs_id}</b>\n\n"
             f"👤 {name} ({username})\n"
@@ -341,8 +350,15 @@ async def confirm_send(callback: CallbackQuery, state: FSMContext):
             f"🏦 {account.capitalize()}",
             reply_markup=director_decision_kb(zvs_id, uid)
         )
+        logger.info(f"[notify_director] OK FSM #{zvs_id} msg_id={sent_to_director.message_id}")
     except Exception as e:
-        logger.error(f"notify director about new zvs: {e}")
+        logger.error(f"[notify_director] FSM FAILED #{zvs_id}: {type(e).__name__}: {e}", exc_info=True)
+    finally:
+        if director_bot:
+            try:
+                await director_bot.session.close()
+            except Exception:
+                pass
 
     await state.clear()
 
