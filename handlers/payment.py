@@ -736,7 +736,10 @@ async def save_payment(message: Message, state: FSMContext, bot: Bot, callback=N
                     )
 
                 if ok and msg_id:
-                    sent_messages.append((uid, msg_id))
+                    # Сохраняем (chat_id, message_id, исходный_текст, есть_фото)
+                    # — нужно для редактирования сообщения у других получателей
+                    # при нажатии «Посажено»: append planted_label к исходному
+                    sent_messages.append((uid, msg_id, notify_text, photo_bytes is not None))
 
                 # Пауза между отправками — чтоб не упереться в лимит Telegram
                 await asyncio.sleep(SEND_DELAY)

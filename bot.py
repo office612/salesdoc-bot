@@ -87,28 +87,59 @@ async def planted_handler(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Edit own planted msg: {e}")
 
-    # Редактируем сообщения ДРУГИХ пользователей
+    # Редактируем сообщения ДРУГИХ пользователей — добавляем planted_label
+    # к их исходному сообщению, а не шлём новое.
     planted_key = f"{rows_str}:{month}"
     stored = get_messages(planted_key)
     clicker_chat = callback.message.chat.id
-    for chat_id, msg_id in stored:
+    for item in stored:
+        # Поддерживаем старый формат (chat_id, msg_id) И новый
+        # (chat_id, msg_id, original_text, has_photo)
+        if len(item) >= 4:
+            chat_id, msg_id, original_text, has_photo = item[:4]
+        else:
+            chat_id, msg_id = item[:2]
+            original_text, has_photo = None, None
+
         if chat_id == clicker_chat:
             continue
-        try:
-            # Убираем кнопку и отправляем уведомление
-            await callback.bot.edit_message_reply_markup(
-                chat_id=chat_id, message_id=msg_id, reply_markup=None
-            )
-        except Exception:
-            pass
-        try:
-            await callback.bot.send_message(
-                chat_id=chat_id,
-                text=f"✅ <b>ПОСАЖЕНО</b> (строки: {rows_str})",
-                parse_mode="HTML"
-            )
-        except Exception as e:
-            logger.error(f"Notify other planted {chat_id}: {e}")
+
+        edited = False
+        if original_text is not None:
+            full_text = original_text + planted_label
+            try:
+                if has_photo:
+                    await callback.bot.edit_message_caption(
+                        chat_id=chat_id, message_id=msg_id,
+                        caption=full_text, parse_mode="HTML",
+                        reply_markup=None,
+                    )
+                else:
+                    await callback.bot.edit_message_text(
+                        chat_id=chat_id, message_id=msg_id,
+                        text=full_text, parse_mode="HTML",
+                        reply_markup=None,
+                    )
+                edited = True
+            except Exception as e:
+                logger.warning(f"Edit other planted {chat_id}/{msg_id}: {e}")
+
+        if not edited:
+            # Fallback — старая логика для старых записей или при ошибке
+            try:
+                await callback.bot.edit_message_reply_markup(
+                    chat_id=chat_id, message_id=msg_id, reply_markup=None
+                )
+            except Exception:
+                pass
+            try:
+                await callback.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"✅ <b>ПОСАЖЕНО</b> (строки: {rows_str})",
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"Notify other planted {chat_id}: {e}")
 
     await callback.answer("✅ Посажено!")
 
