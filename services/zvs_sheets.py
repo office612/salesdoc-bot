@@ -274,23 +274,33 @@ def create_request(telegram_id: int, name: str, amount: int, purpose: str, accou
     try:
         ws = get_current_week_sheet()
         zvs_id = _next_zvs_id()
-        # Найдём номер новой строки
-        col_a = ws.col_values(1)
+        # Номер новой строки = сразу после последнего ID в колонке A.
+        col_a = ws.col_values(COL_ID)
         new_row_num = len(col_a) + 1
-        ws.append_row([
-            str(zvs_id),
-            _now_str(),
-            str(telegram_id),
-            name,
-            int(amount),
-            purpose,
-            account,
-            "Ожидает",
-            "",   # Решено
-            "",   # Комментарий
-            _days_formula(new_row_num),
-            "",   # Оплачено
-        ], value_input_option="USER_ENTERED")
+        # ВАЖНО: пишем в КОНКРЕТНУЮ строку через update(A:L), а НЕ append_row.
+        # append_row из-за блока сводки в колонках N:O мог положить строку не
+        # туда, куда указывает new_row_num — тогда _location_cache/get_request
+        # читали чужую (уже одобренную) строку и «Одобрить» падало в «уже
+        # одобрено». update в явный диапазон гарантирует совпадение строки с
+        # тем, что потом найдут _find_location/warm_location_cache (по колонке A).
+        ws.update(
+            f"A{new_row_num}:L{new_row_num}",
+            [[
+                str(zvs_id),
+                _now_str(),
+                str(telegram_id),
+                name,
+                int(amount),
+                purpose,
+                account,
+                "Ожидает",
+                "",   # Решено
+                "",   # Комментарий
+                _days_formula(new_row_num),
+                "",   # Оплачено
+            ]],
+            value_input_option="USER_ENTERED",
+        )
         _location_cache[zvs_id] = (ws.title, new_row_num)
         logger.info(f"ZVS #{zvs_id} → {amount} тг ({account}) | лист {ws.title}")
         return zvs_id
@@ -304,16 +314,22 @@ def _find_location(zvs_id: int) -> Optional[Tuple[str, int]]:
     cached = _location_cache.get(zvs_id)
     if cached:
         return cached
-    # Линейный поиск по всем weekly листам
+    # Полный поиск по weekly листам. Идём в ОБРАТНОМ порядке (новые недели
+    # добавляются в конец списка листов → reversed = сначала самые свежие), и
+    # внутри листа берём ПОСЛЕДНЕЕ совпадение. Если номер случайно
+    # задублировался, резолвим в самую свежую строку — ту, по которой директор
+    # и нажимает кнопку, а не в старую уже одобренную.
+    # _msg_ids тоже исключаем: там в колонке A лежат zvs_id и можно поймать
+    # ложное совпадение.
     ss = _ss()
     target = str(zvs_id).strip()
-    for ws in ss.worksheets():
-        if ws.title in (META_SHEET_NAME, SUMMARY_SHEET_NAME):
+    for ws in reversed(ss.worksheets()):
+        if ws.title in (META_SHEET_NAME, SUMMARY_SHEET_NAME, MSG_IDS_SHEET_NAME):
             continue
         try:
-            ids = ws.col_values(1)
-            for i, v in enumerate(ids):
-                if str(v).strip() == target:
+            ids = ws.col_values(COL_ID)
+            for i in range(len(ids) - 1, -1, -1):
+                if str(ids[i]).strip() == target:
                     loc = (ws.title, i + 1)
                     _location_cache[zvs_id] = loc
                     return loc
