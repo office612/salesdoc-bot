@@ -187,19 +187,49 @@ def get_applicant_message(zvs_id: int):
     return None
 
 
+def _max_existing_id() -> int:
+    """Максимальный ID среди ВСЕХ недельных листов. 0 если заявок нет.
+    Нужен как страховка: если запись счётчика в _meta когда-то сорвалась,
+    счётчик отстаёт от реальности и начинает выдавать дубли."""
+    ss = _ss()
+    mx = 0
+    for ws in ss.worksheets():
+        if ws.title in (META_SHEET_NAME, SUMMARY_SHEET_NAME, MSG_IDS_SHEET_NAME):
+            continue
+        try:
+            for v in ws.col_values(COL_ID)[1:]:  # [1:] — пропускаем шапку
+                try:
+                    mx = max(mx, int(str(v).strip()))
+                except (ValueError, TypeError):
+                    continue
+        except Exception:
+            continue
+    return mx
+
+
 def _next_zvs_id() -> int:
-    """Атомарно (более-менее) получить следующий ID и записать +1 в _meta."""
+    """Получить следующий ID заявки — без дублей.
+
+    Берём max(счётчик из _meta, реальный максимум по листам)+1. Это
+    самовосстановление: даже если _meta отстал (прошлая запись +1 не
+    прошла из-за транзиентной ошибки Sheets), новый ID всё равно будет
+    больше любого существующего.
+
+    Запись нового значения в _meta ОБЯЗАТЕЛЬНА: если она падает — бросаем
+    исключение НАВЕРХ (а не глотаем). Тогда create_request вернёт None,
+    заявитель увидит «попробуй ещё раз», и заявка с дублирующимся номером
+    просто не создастся."""
     ws = _get_meta_sheet()
     try:
         val = ws.acell("B1").value
-        current = int(val) if val and val.isdigit() else 1
+        counter = int(val) if val and str(val).strip().isdigit() else 0
     except Exception:
-        current = 1
-    try:
-        ws.update_acell("B1", str(current + 1))
-    except Exception as e:
-        logger.error(f"_next_zvs_id update failed: {e}")
-    return current
+        counter = 0
+    new_id = max(counter, _max_existing_id() + 1)
+    # Без try/except: провал записи должен прервать выдачу ID, иначе
+    # следующий вызов прочитает старый счётчик и выдаст тот же номер.
+    ws.update_acell("B1", str(new_id + 1))
+    return new_id
 
 
 # ────────────────────────────────────────────────────────────
