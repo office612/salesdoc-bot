@@ -20,8 +20,9 @@ credentials.json
 .vscode/
 .idea/
 
-# Claude Code
-.claude/
+# Claude Code (keep shared config in .claude/, ignore personal/local files)
+.claude/settings.local.json
+.claude/*.local.json
 
 # OS
 .DS_Store
