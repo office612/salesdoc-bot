@@ -22,7 +22,7 @@ from config import (
     CATEGORIES, DIRECTOR_ID, ACCOUNTANT_IDS, MONTH_SHEETS,
     PRICES_NEW, PRICES_OLD, TIMEZONE, EMPLOYEES, LEADER,
     SERVICE_CATS, STATUS_CATS, PERIOD_MONTHS, NEW_CLIENT_DATE,
-    MANUAL_AMOUNT_CATS, BOT_CATS,
+    MANUAL_AMOUNT_CATS, BOT_CATS, CURRENCY,
 )
 from datetime import datetime, date
 import pytz
@@ -197,7 +197,7 @@ async def enter_manual_amount(message: Message, state: FSMContext):
         await _add_service_to_list(message, state)
         return
     await message.answer(
-        f"Клиент: {data['client']}\nСумма: {amount} тг\nВыберите банк:",
+        f"Клиент: {data['client']}\nСумма: {amount} {CURRENCY}\nВыберите банк:",
         reply_markup=banks_kb("back:manual_amount")
     )
     await state.set_state(PaymentStates.choose_bank)
@@ -231,7 +231,7 @@ async def enter_bot_amount(message: Message, state: FSMContext):
         await _add_service_to_list(message, state)
         return
     await message.answer(
-        f"Клиент: {data['client']}\nПериод: {data['period']}\nСумма: {amount} тг\nВыберите банк:",
+        f"Клиент: {data['client']}\nПериод: {data['period']}\nСумма: {amount} {CURRENCY}\nВыберите банк:",
         reply_markup=banks_kb("back:bot_amount")
     )
     await state.set_state(PaymentStates.choose_bank)
@@ -250,7 +250,7 @@ async def choose_package(callback: CallbackQuery, state: FSMContext):
         await _add_service_to_list(callback.message, state, callback=callback)
         return
     await callback.message.edit_text(
-        f"Клиент: {data['client']}\nПакет: {amount} тг\nВыберите банк:",
+        f"Клиент: {data['client']}\nПакет: {amount} {CURRENCY}\nВыберите банк:",
         reply_markup=banks_kb("back:package")
     )
     await state.set_state(PaymentStates.choose_bank)
@@ -290,6 +290,16 @@ async def choose_period(callback: CallbackQuery, state: FSMContext):
     multiplier = months if months > 0 else 1
     new_unit = PRICES_NEW.get(period, 0)
     old_unit = PRICES_OLD.get(period, 0)
+    # KG: прайс ещё не задан (PRICES_* пустые) — не показываем кнопки с нулями,
+    # сразу просим ввести цену руками (тот же шаг, что price:manual)
+    if not new_unit and not old_unit:
+        await callback.message.edit_text(
+            f"Тариф: {period}\n\n"
+            f"Введите цену за 1 лицензию ({CURRENCY}):\n"
+            "<i>Если клиент заплатил не по тарифу — фактический итог спросим следующим шагом.</i>"
+        )
+        await state.set_state(PaymentStates.enter_price)
+        return
     new_total = new_unit * qty * multiplier
     old_total = old_unit * qty * multiplier
     # Передаём unit:total в callback_data
@@ -308,7 +318,7 @@ async def confirm_price(callback: CallbackQuery, state: FSMContext):
     await state.update_data(price=unit_price, amount=total)
     data = await state.get_data()
     await callback.message.edit_text(
-        f"Сумма: {total} тг\nВыберите банк:",
+        f"Сумма: {total} {CURRENCY}\nВыберите банк:",
         reply_markup=banks_kb()
     )
     await state.set_state(PaymentStates.choose_bank)
@@ -317,7 +327,7 @@ async def confirm_price(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(PaymentStates.confirm_price, F.data == "price:manual")
 async def price_manual(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
-        "Введите цену за 1 лицензию (тг):\n"
+        f"Введите цену за 1 лицензию ({CURRENCY}):\n"
         "<i>Если клиент заплатил не по тарифу — фактический итог спросим следующим шагом.</i>"
     )
     await state.set_state(PaymentStates.enter_price)
@@ -350,8 +360,8 @@ async def enter_price(message: Message, state: FSMContext):
     unit_str = f"{unit_price:,}".replace(",", " ")
     plan_str = f"{plan_total:,}".replace(",", " ")
     await message.answer(
-        f"Цена за лицензию: {unit_str} тг\n"
-        f"Озвучено клиенту: {plan_str} тг ({qty} × {unit_str} × {multiplier})\n\n"
+        f"Цена за лицензию: {unit_str} {CURRENCY}\n"
+        f"Озвучено клиенту: {plan_str} {CURRENCY} ({qty} × {unit_str} × {multiplier})\n\n"
         f"Клиент заплатил столько же?",
         reply_markup=fact_confirm_kb(plan_total)
     )
@@ -365,7 +375,7 @@ async def confirm_fact_plan(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     plan_str = f"{int(data.get('amount', 0)):,}".replace(",", " ")
     await callback.message.edit_text(
-        f"Сумма по плану: {plan_str} тг\nВыберите банк:",
+        f"Сумма по плану: {plan_str} {CURRENCY}\nВыберите банк:",
         reply_markup=banks_kb()
     )
     await state.set_state(PaymentStates.choose_bank)
@@ -377,7 +387,7 @@ async def confirm_fact_other(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     plan_str = f"{int(data.get('amount', 0)):,}".replace(",", " ")
     await callback.message.edit_text(
-        f"Озвучено клиенту: {plan_str} тг\n"
+        f"Озвучено клиенту: {plan_str} {CURRENCY}\n"
         f"Введите фактический итог (сколько клиент реально заплатил):"
     )
     await state.set_state(PaymentStates.enter_fact)
@@ -396,8 +406,8 @@ async def enter_fact_amount(message: Message, state: FSMContext):
     plan_str = f"{int(data.get('amount', 0)):,}".replace(",", " ")
     fact_str = f"{fact_total:,}".replace(",", " ")
     await message.answer(
-        f"Озвучено: {plan_str} тг\n"
-        f"Факт: {fact_str} тг\n\n"
+        f"Озвучено: {plan_str} {CURRENCY}\n"
+        f"Факт: {fact_str} {CURRENCY}\n\n"
         f"Выберите банк:",
         reply_markup=banks_kb()
     )
@@ -541,7 +551,7 @@ async def _add_service_to_list(message: Message, state: FSMContext, callback=Non
     })
     await state.update_data(services_list=services, is_service=False)
 
-    svc_text = f"Услуга добавлена: {data.get('category', '')} — {data.get('amount', '')} тг"
+    svc_text = f"Услуга добавлена: {data.get('category', '')} — {data.get('amount', '')} {CURRENCY}"
     if callback:
         await callback.message.edit_text(
             f"{svc_text}\n\nДобавить ещё услугу?",
@@ -647,9 +657,9 @@ async def save_payment(message: Message, state: FSMContext, bot: Bot, callback=N
                 pass
 
         if len(payments_to_save) == 1:
-            result_text = f"Оплата записана!\n{client} — {total_amount} тг"
+            result_text = f"Оплата записана!\n{client} — {total_amount} {CURRENCY}"
         else:
-            result_text = f"Записано {len(payments_to_save)} строк!\n{client} — {total_amount} тг"
+            result_text = f"Записано {len(payments_to_save)} строк!\n{client} — {total_amount} {CURRENCY}"
 
         # Мягкое предупреждение, если месяц вкладки не совпадает с месяцем
         # фактической даты платежа: запись прошла, но сотрудник увидит флаг и
@@ -673,15 +683,15 @@ async def save_payment(message: Message, state: FSMContext, bot: Bot, callback=N
         for i, p in enumerate(payments_to_save):
             lines.append(
                 f"📋 {p.get('category', '')} | "
-                f"{p.get('qty', '') or ''} x {p.get('price', '')} тг = "
-                f"{p.get('amount', '')} тг"
+                f"{p.get('qty', '') or ''} x {p.get('price', '')} {CURRENCY} = "
+                f"{p.get('amount', '')} {CURRENCY}"
             )
         lines.append(f"\n📅 Месяц: {month_name}")
         lines.append(f"📅 Дата: {payment_date}")
         lines.append(f"🏢 Клиент: {client}")
         lines.append(f"🏦 Банк: {bank}")
         lines.append(f"👤 Менеджер: {manager}")
-        lines.append(f"💰 Итого: {total_amount} тг")
+        lines.append(f"💰 Итого: {total_amount} {CURRENCY}")
         lines.append(f"📊 Строки: {', '.join(str(r) for r in row_nums)}")
         notify_text = "\n".join(lines)
 

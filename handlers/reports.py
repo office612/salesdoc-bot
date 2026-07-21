@@ -4,6 +4,7 @@ from datetime import date, timedelta, datetime
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 
+from config import CURRENCY
 from services.sheets import get_payments_for_period
 from keyboards.reports import reports_kb, back_to_reports_kb, months_kb
 from services.users import get_user_info
@@ -41,7 +42,7 @@ def format_report(payments: list, title: str) -> str:
             str(i) + ". " + dt + " | " + company + " | " + mgr + " | "
             + "{:,.0f}".format(amt).replace(",", " ")
         )
-    lines.append("\n<b>Итого: " + "{:,.0f}".format(total).replace(",", " ") + " тг</b> | Записей: " + str(len(payments)))
+    lines.append("\n<b>Итого: " + "{:,.0f}".format(total).replace(",", " ") + " " + CURRENCY + "</b> | Записей: " + str(len(payments)))
     text = "\n".join(lines)
     if len(text) > 4096:
         text = text[:4090] + "\n..."
@@ -120,7 +121,7 @@ async def report_by_manager(callback: CallbackQuery):
     lines = ["<b>По менеджерам (" + MONTH_NAMES.get(today.month, "") + ")</b>\n"]
     for mgr, plist in sorted(by_mgr.items()):
         total = sum(p.get("amount", 0) for p in plist)
-        lines.append(mgr + ": " + str(len(plist)) + " оплат — <b>" + "{:,.0f}".format(total).replace(",", " ") + " тг</b>")
+        lines.append(mgr + ": " + str(len(plist)) + " оплат — <b>" + "{:,.0f}".format(total).replace(",", " ") + " " + CURRENCY + "</b>")
     await callback.message.edit_text("\n".join(lines), reply_markup=back_to_reports_kb())
     await callback.answer()
 
@@ -144,7 +145,7 @@ async def report_by_category(callback: CallbackQuery):
     lines = ["<b>По статьям (" + MONTH_NAMES.get(today.month, "") + ")</b>\n"]
     for cat, plist in sorted(by_cat.items()):
         total = sum(p.get("amount", 0) for p in plist)
-        lines.append(cat + ": " + str(len(plist)) + " оплат — <b>" + "{:,.0f}".format(total).replace(",", " ") + " тг</b>")
+        lines.append(cat + ": " + str(len(plist)) + " оплат — <b>" + "{:,.0f}".format(total).replace(",", " ") + " " + CURRENCY + "</b>")
     await callback.message.edit_text("\n".join(lines), reply_markup=back_to_reports_kb())
     await callback.answer()
 

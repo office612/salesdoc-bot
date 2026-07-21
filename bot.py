@@ -10,7 +10,7 @@ from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, Message
 
 from config import BOT_TOKEN, DIRECTOR_ID, ACCOUNTANT_IDS
 from handlers import start, payment, reports, subscription
@@ -39,6 +39,27 @@ logging.basicConfig(
     ],
 )
 logger = logging.getLogger(__name__)
+
+
+# ── Заглушка (2026-07-21): BOT_DISABLED=1 на Railway — ОСНОВНОЙ бот оплат
+# отвечает всем одним сообщением и ничего не пишет в таблицы. Касса и ЗВС
+# работают как обычно. Убрать заглушку = удалить переменную BOT_DISABLED.
+BOT_DISABLED = os.getenv("BOT_DISABLED", "").strip().lower() in ("1", "true", "yes")
+DISABLED_TEXT = (
+    "Бот временно не работает с 21.07.2026.\n"
+    "Оплаты через бота не принимаются.\n"
+    "По всем вопросам — к Мирзахиту."
+)
+
+stub_router = Router()
+
+@stub_router.message()
+async def _stub_message(message: Message):
+    await message.answer(DISABLED_TEXT)
+
+@stub_router.callback_query()
+async def _stub_callback(callback: CallbackQuery):
+    await callback.answer("Бот временно не работает", show_alert=True)
 
 
 # ── Роутер для @SDfinansbot — обработка кнопки «Посажено» ──
@@ -230,9 +251,14 @@ async def main():
     )
     dp = Dispatcher(storage=MemoryStorage())
 
-    dp.include_router(start.router)
-    dp.include_router(payment.router)
-    dp.include_router(reports.router)
+    if BOT_DISABLED:
+        # Заглушка: ни одна команда не работает, оплаты не принимаются
+        dp.include_router(stub_router)
+        logger.info("BOT_DISABLED=1 — основной бот в режиме заглушки")
+    else:
+        dp.include_router(start.router)
+        dp.include_router(payment.router)
+        dp.include_router(reports.router)
 
     logger.info("Бот запущен")
 
