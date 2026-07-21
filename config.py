@@ -243,11 +243,11 @@ if COUNTRY == "KG":
         "Amir_abdylahatov": "Амир",
     }
 
-    # Пакеты внедрения KG (от CEO 21.07.2026): 19 900 / 29 900 / 99 900 сом —
-    # nov_vnedrenie идёт через кнопки пакетов как в KZ, но со своими суммами.
-    # Интеграция (пакетов KG нет) и «Кантри» — ручной ввод суммы (ветка MANUAL
-    # проверяется раньше SERVICE в handlers/payment.py). KZ это не задевает:
-    # блок выполняется только при COUNTRY=KG.
+    # Пакеты KG (от CEO 21.07.2026): 19 900 / 29 900 / 99 900 сом —
+    # внедрение И интеграция идут через кнопки пакетов (как в KZ, одни пакеты
+    # на обе услуги; CEO подтвердил для интеграции «я же выбрал пакет»).
+    # «Кантри» — ручной ввод суммы (ветка MANUAL раньше SERVICE в handlers).
+    # KZ это не задевает: блок выполняется только при COUNTRY=KG.
     PACKAGES = [19900, 29900, 99900]
-    MANUAL_AMOUNT_CATS = set(MANUAL_AMOUNT_CATS) | {"nov_integr", "kantri"}
+    MANUAL_AMOUNT_CATS = set(MANUAL_AMOUNT_CATS) | {"kantri"}
     SERVICE_CATS = set(SERVICE_CATS) | {"kantri"}
