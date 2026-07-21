@@ -28,3 +28,4 @@ class PaymentStates(StatesGroup):
     enter_bot_amount = State()
     ask_add_service = State()
     choose_service_category = State()
+    choose_service_bank = State()  # 21.07.2026: услуги оплачивают в другой банк
