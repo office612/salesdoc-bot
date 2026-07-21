@@ -8,7 +8,7 @@ from typing import Optional
 import pytz
 from google.oauth2.service_account import Credentials
 
-from config import SPREADSHEET_ID, MONTH_SHEETS, TIMEZONE, STATUS_CATS
+from config import SPREADSHEET_ID, MONTH_SHEETS, TIMEZONE, STATUS_CATS, WRITE_ACT_COLS
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +146,15 @@ def _period_to_num(period: str) -> int:
         return 6
     elif p == "12 месяцев":
         return 12
+    # Написания тарифов таблицы KG (2026-07-21) — синхронно с salesdoc_sync._period_to_months
+    elif p == "месяц":
+        return 1
+    elif p == "3 месяц":
+        return 3
+    elif p == "6 месяц":
+        return 6
+    elif p == "12 месяц":
+        return 12
     elif p == "10 дней":
         return 0
     elif p == "20 дней":
@@ -246,7 +255,9 @@ async def add_payment(data: dict) -> int:
     ]
 
     ws.update(f"A{next_row}:M{next_row}", [row_am], value_input_option="USER_ENTERED")
-    ws.update(f"T{next_row}:W{next_row}", [row_tw], value_input_option="USER_ENTERED")
+    # В таблице KG колонок T-W нет — не пишем (config.WRITE_ACT_COLS)
+    if WRITE_ACT_COLS:
+        ws.update(f"T{next_row}:W{next_row}", [row_tw], value_input_option="USER_ENTERED")
     logger.info("Added row=" + str(next_row))
     return next_row
 

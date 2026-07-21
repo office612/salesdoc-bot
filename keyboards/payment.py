@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import calendar
 import pytz
 
-from config import CATEGORIES, LICENSE_TYPES, PERIODS, BANKS, MONTH_SHEETS, PRICES_NEW, PRICES_OLD, TIMEZONE
+from config import CATEGORIES, LICENSE_TYPES, PERIODS, BANKS, MONTH_SHEETS, PRICES_NEW, PRICES_OLD, TIMEZONE, CURRENCY
 
 TOP_CATEGORIES = ['new_client', 'nov_vnedrenie', 'nov_integr', 'abon_plata', 'oplata_dolga', 'balans']
 
@@ -57,7 +57,15 @@ def periods_kb(show_all: bool = False) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=p, callback_data=f'per:{p}')]
             for p in PERIODS if p in TOP_PERIODS
         ]
-        buttons.append([InlineKeyboardButton(text="Ещё ▼", callback_data="per:show_all")])
+        # KG: написания тарифов другие, TOP_PERIODS (KZ) не совпадает ни с одним —
+        # без этого фолбэка клавиатура была бы пустой (только «Ещё/Назад/Отмена»)
+        if not buttons:
+            buttons = [
+                [InlineKeyboardButton(text=p, callback_data=f'per:{p}')]
+                for p in PERIODS if p not in ("Баланс", "Услуга")
+            ]
+        else:
+            buttons.append([InlineKeyboardButton(text="Ещё ▼", callback_data="per:show_all")])
     buttons.append([back_button("back:qty")])
     buttons.append([InlineKeyboardButton(text="Отмена", callback_data="cancel")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -68,13 +76,13 @@ def confirm_price_kb(new_total: int, old_total: int, new_unit: int = 0, old_unit
     ou = old_unit or old_total
     if new_total == old_total:
         buttons = [
-            [InlineKeyboardButton(text=f"Подтвердить: {new_total:,} тг".replace(",", " "), callback_data=f"price:confirm:{new_total}:{nu}")],
+            [InlineKeyboardButton(text=f"Подтвердить: {new_total:,} {CURRENCY}".replace(",", " "), callback_data=f"price:confirm:{new_total}:{nu}")],
             [InlineKeyboardButton(text="Ввести вручную", callback_data="price:manual")],
         ]
     else:
         buttons = [
-            [InlineKeyboardButton(text=f"Новый клиент: {new_total:,} тг".replace(",", " "), callback_data=f"price:confirm:{new_total}:{nu}")],
-            [InlineKeyboardButton(text=f"Старый клиент: {old_total:,} тг".replace(",", " "), callback_data=f"price:confirm:{old_total}:{ou}")],
+            [InlineKeyboardButton(text=f"Новый клиент: {new_total:,} {CURRENCY}".replace(",", " "), callback_data=f"price:confirm:{new_total}:{nu}")],
+            [InlineKeyboardButton(text=f"Старый клиент: {old_total:,} {CURRENCY}".replace(",", " "), callback_data=f"price:confirm:{old_total}:{ou}")],
             [InlineKeyboardButton(text="Ввести вручную", callback_data="price:manual")],
         ]
     buttons.append([back_button("back:period")])
@@ -90,7 +98,7 @@ def fact_confirm_kb(plan_total: int) -> InlineKeyboardMarkup:
     """
     plan_str = f"{plan_total:,}".replace(",", " ")
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"✓ По плану — {plan_str} тг", callback_data="fact:plan")],
+        [InlineKeyboardButton(text=f"✓ По плану — {plan_str} {CURRENCY}", callback_data="fact:plan")],
         [InlineKeyboardButton(text="💰 Клиент заплатил иначе", callback_data="fact:other")],
         [back_button("back:price")],
         [InlineKeyboardButton(text="Отмена", callback_data="cancel")],
@@ -272,9 +280,13 @@ def service_categories_kb() -> InlineKeyboardMarkup:
         ('dorabotka', 'Доработка'),
         ('dop_obuchenie', 'Доп. обучение'),
     ]
+    # Показываем только услуги, которые есть в CATEGORIES текущей страны
+    # (в KG нет ста.внедрения/накладной и т.п. — без фильтра в таблицу
+    # улетел бы латинский ключ вместо статьи). Для KZ список не меняется.
+    known = {k for k, _ in CATEGORIES}
     buttons = [
         [InlineKeyboardButton(text=label, callback_data=f'svc:{key}')]
-        for key, label in service_cats
+        for key, label in service_cats if key in known
     ]
     buttons.append([InlineKeyboardButton(text="Готово", callback_data="add_service:done")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)

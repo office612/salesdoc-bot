@@ -18,6 +18,8 @@ from typing import Optional
 
 import requests
 
+from config import COUNTRY, CURRENCY
+
 logger = logging.getLogger(__name__)
 
 SALESDOC_URL = os.getenv("SALESDOC_URL", "https://salesdoc-app.vercel.app")
@@ -37,10 +39,15 @@ def _period_to_months(period: str) -> int:
         "3 месячный": 3,
         "6 месячный": 6,
         "12 месяцев": 12,
+        # Написания тарифов таблицы KG (2026-07-21)
+        "месяц": 1,
+        "3 месяц": 3,
+        "6 месяц": 6,
+        "12 месяц": 12,
     }.get(p, 1)
 
 
-def sync_payment_to_salesdoc(data: dict, row_num: int, country: str = "KZ") -> Optional[dict]:
+def sync_payment_to_salesdoc(data: dict, row_num: int, country: str = COUNTRY) -> Optional[dict]:
     """Шлёт оплату в SalesDoc.
 
     data — словарь как в add_payment (категория, клиент, тариф, сумма ...).
@@ -119,7 +126,9 @@ def notify_operators_new_card(payload: dict, sync_response: dict) -> None:
     manager = payload.get("manager") or "—"
     category = payload.get("category") or ""
 
-    amount_str = f"{int(amount):,} ₸".replace(",", " ") if amount else "—"
+    # KZ-уведомление исторически с «₸» — сохраняем байт-в-байт
+    _cur = "₸" if COUNTRY == "KZ" else CURRENCY
+    amount_str = f"{int(amount):,} {_cur}".replace(",", " ") if amount else "—"
     text_lines = [
         "<b>Новый клиент во Внедрение</b>",
         "",
