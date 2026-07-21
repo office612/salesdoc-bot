@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import calendar
 import pytz
 
-from config import CATEGORIES, LICENSE_TYPES, PERIODS, BANKS, MONTH_SHEETS, PRICES_NEW, PRICES_OLD, TIMEZONE, CURRENCY
+from config import CATEGORIES, LICENSE_TYPES, PERIODS, BANKS, MONTH_SHEETS, PRICES_NEW, PRICES_OLD, TIMEZONE, CURRENCY, PACKAGES
 
 TOP_CATEGORIES = ['new_client', 'nov_vnedrenie', 'nov_integr', 'abon_plata', 'oplata_dolga', 'balans']
 
@@ -147,10 +147,13 @@ def months_kb() -> InlineKeyboardMarkup:
 
 
 def package_kb() -> InlineKeyboardMarkup:
+    # Суммы пакетов — из config.PACKAGES (у KZ и KG свои прайсы)
     buttons = [
-        [InlineKeyboardButton(text="Пакет 1 (99 000)", callback_data="pkg:99000")],
-        [InlineKeyboardButton(text="Пакет 2 (199 000)", callback_data="pkg:199000")],
-        [InlineKeyboardButton(text="Пакет 3 (599 000)", callback_data="pkg:599000")],
+        [InlineKeyboardButton(
+            text=f"Пакет {i + 1} ({amt:,})".replace(",", " "),
+            callback_data=f"pkg:{amt}",
+        )]
+        for i, amt in enumerate(PACKAGES)
     ]
     buttons.append([back_button("back:client")])
     buttons.append([InlineKeyboardButton(text="Отмена", callback_data="cancel")])
