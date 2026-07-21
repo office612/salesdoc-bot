@@ -102,7 +102,17 @@ def get_spreadsheet():
 
 
 def get_sheet(sheet_name: str):
-    return get_spreadsheet().worksheet(sheet_name)
+    ss = get_spreadsheet()
+    try:
+        return ss.worksheet(sheet_name)
+    except gspread.WorksheetNotFound:
+        # В таблице KG листы-месяцы названы вразнобой («январь» vs «Май») —
+        # ищем без учёта регистра и пробелов, чтобы бот не падал из-за буквы
+        want = sheet_name.strip().lower()
+        for ws in ss.worksheets():
+            if ws.title.strip().lower() == want:
+                return ws
+        raise
 
 
 def get_sheet_by_month(month: int):
