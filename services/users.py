@@ -1,4 +1,4 @@
-from config import EMPLOYEES, LEADER, DIRECTOR_ID
+from config import EMPLOYEES, LEADER, DIRECTOR_ID, USERNAME_TO_NAME
 from services.sheets import get_user, register_user
 
 # Маппинг старых английских имён на русские.
@@ -43,10 +43,12 @@ def register(telegram_id: int, name: str) -> dict:
 
 
 def fix_legacy_name(telegram_id: int, user: dict) -> dict:
-    """Если имя старое (английское) — исправляем на русское и обновляем в таблице."""
+    """Если имя старое (английское) или Telegram-ник — исправляем на каноничное
+    и обновляем в таблице. USERNAME_TO_NAME лечит записи, созданные до того,
+    как одобрение стало спрашивать имя из списка (21.07.2026)."""
     name = user.get('name', '')
-    if name in LEGACY_NAMES:
-        new_name = LEGACY_NAMES[name]
+    if name in LEGACY_NAMES or name in USERNAME_TO_NAME:
+        new_name = LEGACY_NAMES.get(name) or USERNAME_TO_NAME[name]
         new_role = get_role(new_name, telegram_id)
         register_user(telegram_id, new_name, new_role)
         user = dict(user)

@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import calendar
 import pytz
 
-from config import CATEGORIES, LICENSE_TYPES, PERIODS, BANKS, MONTH_SHEETS, PRICES_NEW, PRICES_OLD, TIMEZONE, CURRENCY, PACKAGES
+from config import CATEGORIES, LICENSE_TYPES, PERIODS, BANKS, MONTH_SHEETS, PRICES_NEW, PRICES_OLD, TIMEZONE, CURRENCY, PACKAGES, TOP_PERIODS
 
 TOP_CATEGORIES = ['new_client', 'nov_vnedrenie', 'nov_integr', 'abon_plata', 'oplata_dolga', 'balans']
 
@@ -44,7 +44,7 @@ def license_types_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-TOP_PERIODS = ["3 месячный", "6 месячный", "12 месяцев"]
+# TOP_PERIODS теперь в config.py — у KZ и KG свои написания тарифов
 
 def periods_kb(show_all: bool = False) -> InlineKeyboardMarkup:
     if show_all:

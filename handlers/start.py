@@ -3,7 +3,7 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import CommandStart, Command
 
-from services.users import get_user_info, fix_legacy_name
+from services.users import get_user_info, fix_legacy_name, get_all_names
 from services.sheets import get_or_create_users_sheet, register_user
 from keyboards.main import main_menu
 from config import DIRECTOR_ID, USERNAME_TO_NAME
@@ -103,11 +103,54 @@ async def handle_approve(callback: CallbackQuery):
         await callback.answer("Отклонено.")
         return
 
+    # 21.07.2026: имя в users — ТОЛЬКО каноничное из списка сотрудников. Раньше
+    # брали Telegram-ник (Amir_abdylahatov), он попадал в колонку «Менеджер»
+    # Доходов, и выпадающий список таблицы его не узнавал. Директор выбирает, кто это.
+    role_label = ROLE_LABELS.get(role, role)
+    names = get_all_names()
+    rows = [
+        [InlineKeyboardButton(text=nm, callback_data=f"apname:{role}:{tg_id}:{i}")]
+        for i, nm in enumerate(names)
+    ]
+    rows.append([InlineKeyboardButton(
+        text=f"Как в Telegram ({name[:25]})",
+        callback_data=f"apname:{role}:{tg_id}:-1:{name_or_username[:30]}"
+    )])
+    await callback.message.edit_text(
+        callback.message.text + f"\n\nРоль: <b>{role_label}</b>. Кто это? Выберите имя:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows)
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("apname:"))
+async def handle_approve_name(callback: CallbackQuery):
+    """Шаг 2 одобрения: директор выбрал каноничное имя сотрудника."""
+    if callback.from_user.id != DIRECTOR_ID:
+        await callback.answer("Нет прав.", show_alert=True)
+        return
+    parts = callback.data.split(":", 4)
+    if len(parts) < 4:
+        await callback.answer("Ошибка данных.", show_alert=True)
+        return
+    role, tg_id_str, idx_str = parts[1], parts[2], parts[3]
+    raw = parts[4] if len(parts) > 4 else ""
+    try:
+        tg_id = int(tg_id_str)
+        idx = int(idx_str)
+    except ValueError:
+        await callback.answer("Неверные данные.", show_alert=True)
+        return
+    names = get_all_names()
+    if 0 <= idx < len(names):
+        name = names[idx]
+    else:
+        name = USERNAME_TO_NAME.get(raw, raw) or "Без имени"
     try:
         register_user(tg_id, name, role)
         role_label = ROLE_LABELS.get(role, role)
         await callback.message.edit_text(
-            callback.message.text + f"\n\n✅ <b>Одобрен как {role_label}</b>"
+            callback.message.text + f"\n\n✅ <b>Одобрен как {role_label}: {name}</b>"
         )
         try:
             await callback.bot.send_message(

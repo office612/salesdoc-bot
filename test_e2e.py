@@ -167,14 +167,24 @@ async def test_license_by_tariff():
     print(f"  ✓ per:Месячный → state={cur}, period={data['period']}")
 
     # Шаг 8: подтверждает «Новый клиент: 21 000» (callback_data: price:confirm:21000:7000)
+    # 21.07.2026: после цены появился шаг «фактическая оплата» (confirm_fact)
     cb = make_callback("price:confirm:21000:7000")
     await hp.confirm_price(cb, state)
     cur = await state.get_state()
     data = await state.get_data()
-    assert cur == PaymentStates.choose_bank.state
+    assert cur == PaymentStates.confirm_fact.state
     assert data["price"] == 7000
     assert data["amount"] == 21000
     print(f"  ✓ price:confirm:21000:7000 → state={cur}")
+
+    # Шаг 8b: клиент заплатил по плану → M пусто, дальше банк
+    cb = make_callback("fact:plan")
+    await hp.confirm_fact_plan(cb, state)
+    cur = await state.get_state()
+    data = await state.get_data()
+    assert cur == PaymentStates.choose_bank.state
+    assert data.get("fact_amount", "") == ""
+    print(f"  ✓ fact:plan → state={cur}")
     print(f"    H={data['price']}, J={data['amount']}, M={data.get('fact_amount', '')}")
 
     # Шаг 9: выбирает банк
