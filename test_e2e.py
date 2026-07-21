@@ -110,18 +110,10 @@ async def test_license_by_tariff():
     msg = make_message("💳 Внести оплату")
     await hp.start_payment_text(msg, state)
     cur = await state.get_state()
-    assert cur == PaymentStates.choose_month.state, f"expected choose_month, got {cur}"
-    print(f"  ✓ После «Внести оплату» → state={cur}")
+    # 21.07.2026: вопрос месяца убран — сразу выбор статьи (месяц придёт из даты оплаты)
+    assert cur == PaymentStates.choose_category.state, f"expected choose_category, got {cur}"
+    print(f"  ✓ После «Внести оплату» → state={cur} (месяц не спрашиваем)")
     print(f"    бот ответил: {msg.answer.call_args.args[0][:60]}...")
-
-    # Шаг 2: выбирает месяц (5 = Май)
-    cb = make_callback("month:5")
-    await hp.choose_month(cb, state)
-    cur = await state.get_state()
-    data = await state.get_data()
-    assert cur == PaymentStates.choose_category.state
-    assert data["month"] == 5
-    print(f"  ✓ month:5 → state={cur}, data.month=5")
 
     # Шаг 3: выбирает статью abon_plata
     cb = make_callback("cat:abon_plata")
@@ -246,7 +238,6 @@ async def test_manual_with_fact():
 
     # Быстро прокатываемся до confirm_price
     await hp.start_payment_text(make_message("💳 Внести оплату"), state)
-    await hp.choose_month(make_callback("month:5"), state)
     await hp.choose_category(make_callback("cat:abon_plata"), state)
     await hp.choose_license(make_callback("lic:Лицензии"), state)
     await hp.enter_client(make_message("ИП Петров"), state)
@@ -324,7 +315,6 @@ async def test_manual_by_plan():
     FakeWS._filled = 6
 
     await hp.start_payment_text(make_message("💳 Внести оплату"), state)
-    await hp.choose_month(make_callback("month:5"), state)
     await hp.choose_category(make_callback("cat:abon_plata"), state)
     await hp.choose_license(make_callback("lic:Лицензии"), state)
     await hp.enter_client(make_message("ТОО Сигма"), state)
@@ -363,7 +353,7 @@ async def test_manual_by_plan():
 # ── Сценарий 4: предупреждение о несоответствии месяца ────────
 async def test_month_mismatch_warning():
     print("=" * 70)
-    print("E2E #4: ПРЕДУПРЕЖДЕНИЕ — месяц вкладки ≠ месяц даты")
+    print("E2E #4: МЕСЯЦ ЛИСТА БЕРЁТСЯ ИЗ ДАТЫ ОПЛАТЫ")
     print("=" * 70)
 
     storage = MemoryStorage()
@@ -383,20 +373,21 @@ async def test_month_mismatch_warning():
     await hp.choose_bank(make_callback("bank:халык"), state)
     # Дата 03.05.2026 (МАЙ!)
     await hp.choose_payment_date(make_callback("pdate:2026-05-03"), state)
+    # Месяц листа должен выставиться из даты — проверяем ДО сохранения (state потом чистится)
+    data = await state.get_data()
+    assert data["month"] == 5, f"месяц должен прийти из даты оплаты, got {data.get('month')}"
 
     skip_cb = make_callback("skip_receipt")
     bot_mock = AsyncMock()
     await hp.skip_receipt(skip_cb, state, bot_mock)
 
-    # Проверяем что в ответе есть предупреждение
     final_text = skip_cb.message.edit_text.call_args.args[0]
     print(f"\n  📨 Финальный ответ боту:\n{'-' * 60}")
     for line in final_text.split("\n"):
         print(f"    {line}")
     print(f"{'-' * 60}")
-    assert "Внимание" in final_text, "Ожидалось предупреждение о несовпадении месяца"
-    assert "Апр" in final_text and "Май" in final_text
-    print("\n  ✅ ПРЕДУПРЕЖДЕНИЕ ВЫВОДИТСЯ КОРРЕКТНО\n")
+    assert "Внимание" not in final_text, "предупреждение о месяце не нужно — месяц берётся из даты"
+    print("\n  МЕСЯЦ ЛИСТА ВЗЯТ ИЗ ДАТЫ ОПЛАТЫ (Май), ПРЕДУПРЕЖДЕНИЯ НЕТ\n")
 
 
 # ── Сценарий 5: подсветка текущего месяца в клавиатуре ───────

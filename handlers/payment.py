@@ -22,7 +22,7 @@ from config import (
     CATEGORIES, DIRECTOR_ID, ACCOUNTANT_IDS, MONTH_SHEETS,
     PRICES_NEW, PRICES_OLD, TIMEZONE, EMPLOYEES, LEADER,
     SERVICE_CATS, STATUS_CATS, PERIOD_MONTHS, NEW_CLIENT_DATE,
-    MANUAL_AMOUNT_CATS, BOT_CATS, CURRENCY,
+    MANUAL_AMOUNT_CATS, BOT_CATS, CURRENCY, BANKS,
 )
 from datetime import datetime, date
 import pytz
@@ -56,9 +56,11 @@ async def start_payment_text(message: Message, state: FSMContext):
         await message.answer("Выберите менеджера:", reply_markup=managers_kb())
         await state.set_state(PaymentStates.choose_manager)
     else:
+        # 21.07.2026: вопрос «Выберите месяц» убран — лист определяется
+        # автоматически по дате оплаты (её и так спрашиваем в конце)
         await state.update_data(manager=user["name"])
-        await message.answer(MONTH_PROMPT, reply_markup=months_kb())
-        await state.set_state(PaymentStates.choose_month)
+        await message.answer("Выберите статью:", reply_markup=categories_kb())
+        await state.set_state(PaymentStates.choose_category)
 
 
 @router.callback_query(F.data == "new_payment")
@@ -75,16 +77,16 @@ async def start_payment(callback: CallbackQuery, state: FSMContext):
         await state.set_state(PaymentStates.choose_manager)
     else:
         await state.update_data(manager=user["name"])
-        await callback.message.edit_text(MONTH_PROMPT, reply_markup=months_kb())
-        await state.set_state(PaymentStates.choose_month)
+        await callback.message.edit_text("Выберите статью:", reply_markup=categories_kb())
+        await state.set_state(PaymentStates.choose_category)
 
 
 @router.callback_query(PaymentStates.choose_manager, F.data.startswith("mgr:"))
 async def choose_manager(callback: CallbackQuery, state: FSMContext):
     manager = callback.data.split(":", 1)[1]
     await state.update_data(manager=manager)
-    await callback.message.edit_text(MONTH_PROMPT, reply_markup=months_kb())
-    await state.set_state(PaymentStates.choose_month)
+    await callback.message.edit_text("Выберите статью:", reply_markup=categories_kb())
+    await state.set_state(PaymentStates.choose_category)
 
 
 @router.callback_query(PaymentStates.choose_month, F.data.startswith("month:"))
@@ -488,7 +490,9 @@ async def navigate_calendar(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(PaymentStates.choose_payment_date, F.data.startswith('pdate:day:'))
 async def pick_calendar_day(callback: CallbackQuery, state: FSMContext):
     date_str = callback.data.split(':', 2)[2]  # "06.04.2026"
-    await state.update_data(payment_date=date_str)
+    # 21.07.2026: лист месяца = месяц даты оплаты (вопрос «Выберите месяц» убран)
+    _m = int(date_str.split('.')[1])
+    await state.update_data(payment_date=date_str, month=_m, month_name=MONTH_SHEETS.get(_m, ""))
     await callback.message.edit_text(
         "Отправьте фото/файл чека или нажмите 'Пропустить':",
         reply_markup=skip_receipt_kb()
@@ -511,7 +515,8 @@ async def choose_payment_date(callback: CallbackQuery, state: FSMContext):
         await state.set_state(PaymentStates.enter_payment_date)
         return
     payment_date = date.fromisoformat(date_str)
-    await state.update_data(payment_date=payment_date.strftime("%d.%m.%Y"))
+    await state.update_data(payment_date=payment_date.strftime("%d.%m.%Y"),
+                            month=payment_date.month, month_name=MONTH_SHEETS.get(payment_date.month, ""))
     await callback.message.edit_text(
         "Отправьте фото/файл чека или нажмите 'Пропустить':",
         reply_markup=skip_receipt_kb()
@@ -523,7 +528,8 @@ async def choose_payment_date(callback: CallbackQuery, state: FSMContext):
 async def enter_payment_date(message: Message, state: FSMContext):
     try:
         dt = datetime.strptime(message.text.strip(), "%d.%m.%Y")
-        await state.update_data(payment_date=dt.strftime("%d.%m.%Y"))
+        await state.update_data(payment_date=dt.strftime("%d.%m.%Y"),
+                                month=dt.month, month_name=MONTH_SHEETS.get(dt.month, ""))
     except ValueError:
         await message.answer("Неверный формат. Введите дату в формате ДД.ММ.ГГГГ:")
         return
@@ -539,7 +545,25 @@ async def enter_payment_date(message: Message, state: FSMContext):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 async def _add_service_to_list(message: Message, state: FSMContext, callback=None):
-    """Добавляет услугу в список и спрашивает 'Добавить ещё?'"""
+    """Сумма услуги известна → спрашиваем банк услуги (21.07.2026: услуги
+    оплачивают в ДРУГОЙ банк, нельзя наследовать банк лицензии), потом
+    добавляем в список в choose_service_bank."""
+    data = await state.get_data()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=b, callback_data=f"svcbank:{b}")] for b in BANKS
+    ])
+    txt = (f"Услуга: {data.get('category', '')} — {data.get('amount', '')} {CURRENCY}\n"
+           f"В какой банк оплатили услугу?")
+    if callback:
+        await callback.message.edit_text(txt, reply_markup=kb)
+    else:
+        await message.answer(txt, reply_markup=kb)
+    await state.set_state(PaymentStates.choose_service_bank)
+
+
+@router.callback_query(PaymentStates.choose_service_bank, F.data.startswith("svcbank:"))
+async def choose_service_bank(callback: CallbackQuery, state: FSMContext):
+    svc_bank = callback.data.split(":", 1)[1]
     data = await state.get_data()
     services = data.get("services_list", [])
     services.append({
@@ -550,20 +574,17 @@ async def _add_service_to_list(message: Message, state: FSMContext, callback=Non
         "price": data.get("price", ""),
         "amount": data.get("amount", ""),
         "fact_amount": data.get("fact_amount", ""),
+        "bank": svc_bank,  # свой банк у каждой услуги
     })
     await state.update_data(services_list=services, is_service=False)
-
-    svc_text = f"Услуга добавлена: {data.get('category', '')} — {data.get('amount', '')} {CURRENCY}"
-    if callback:
-        await callback.message.edit_text(
-            f"{svc_text}\n\nДобавить ещё услугу?",
-            reply_markup=add_service_kb()
-        )
-    else:
-        await message.answer(
-            f"{svc_text}\n\nДобавить ещё услугу?",
-            reply_markup=add_service_kb()
-        )
+    svc_text = f"Услуга добавлена: {data.get('category', '')} — {data.get('amount', '')} {CURRENCY} ({svc_bank})"
+    await callback.message.edit_text(
+        f"{svc_text}\n\nДобавить ещё услугу?",
+        reply_markup=add_service_kb()
+    )
+    # Явно возвращаем состояние «Добавить ещё?» — раньше оно не выставлялось
+    # и кнопки могли молча не срабатывать
+    await state.set_state(PaymentStates.ask_add_service)
     await state.set_state(PaymentStates.ask_add_service)
 
 
@@ -636,7 +657,7 @@ async def save_payment(message: Message, state: FSMContext, bot: Bot, callback=N
                 "price": p.get("price", ""),
                 "amount": p.get("amount", ""),
                 "fact_amount": p.get("fact_amount", ""),
-                "bank": bank,
+                "bank": p.get("bank") or bank,  # у услуг свой банк (21.07.2026)
                 "payment_date": payment_date,
                 "receipt_file_id": receipt_file_id,
                 "month": month,
@@ -841,17 +862,14 @@ async def choose_service_category(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "back:month")
 async def back_to_month(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text(MONTH_PROMPT, reply_markup=months_kb())
-    await state.set_state(PaymentStates.choose_month)
+    # Вопроса про месяц больше нет — «Назад» с первого шага возвращает к статьям
+    await callback.message.edit_text("Выберите статью:", reply_markup=categories_kb())
+    await state.set_state(PaymentStates.choose_category)
 
 
 @router.callback_query(F.data == "back:category")
 async def back_to_category(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    await callback.message.edit_text(
-        f"Месяц: {data.get('month_name', '')}\nВыберите статью:",
-        reply_markup=categories_kb()
-    )
+    await callback.message.edit_text("Выберите статью:", reply_markup=categories_kb())
     await state.set_state(PaymentStates.choose_category)
 
 
