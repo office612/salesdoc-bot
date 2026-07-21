@@ -315,13 +315,15 @@ async def confirm_price(callback: CallbackQuery, state: FSMContext):
     parts = callback.data.split(":")
     total = int(parts[2])
     unit_price = int(parts[3]) if len(parts) > 3 else total
-    await state.update_data(price=unit_price, amount=total)
-    data = await state.get_data()
+    # 21.07.2026: после цены — шаг «фактическая оплата» (как в ручном вводе):
+    # клиент часто платит не ровно по прайсу, факт идёт в колонку M
+    await state.update_data(price=unit_price, amount=total, fact_amount="")
+    plan_str = f"{total:,}".replace(",", " ")
     await callback.message.edit_text(
-        f"Сумма: {total} {CURRENCY}\nВыберите банк:",
-        reply_markup=banks_kb()
+        f"Сумма: {plan_str} {CURRENCY}\n\nКлиент заплатил столько же?",
+        reply_markup=fact_confirm_kb(total)
     )
-    await state.set_state(PaymentStates.choose_bank)
+    await state.set_state(PaymentStates.confirm_fact)
 
 
 @router.callback_query(PaymentStates.confirm_price, F.data == "price:manual")
